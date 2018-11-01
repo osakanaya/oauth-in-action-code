@@ -154,7 +154,31 @@ app.post('/approve', function(req, res) {
 			});
 			res.redirect(urlParsed);
 			return;
-		} else {
+
+		} else if (query.response_type == 'token') {
+      var rscope = getScopesFromForm(req.body);
+      var client = getClient(query.client_id);
+      var cscope = client.scope ? client.scope.split(' ') : undefined;
+      
+      if (__.difference(rscope, cscope).length > 0) {
+        var urlParsed = buildUrl(query.redirect_uri, {}, qs.stringify({error: 'invalid_scope'}));
+        res.redirect(urlParsed);
+        return;
+      }
+      
+      var access_token = randomstring.generate();
+      nosql.insert({access_token: access_token, client_id: client.client_id, scope: rscope});
+      
+      var token_response = { access_token: access_token, token_type: 'Bearer', scope: rscope.join(' ')};
+      if (query.state) {
+        token_response.state = query.state;
+      }
+      
+      var urlParsed = buildUrl(query.redirect_uri, {}, qs.stringify(token_response));
+      res.redirect(urlParsed);
+      return;
+
+    } else {
 			// we got a response type we don't understand
 			var urlParsed = buildUrl(query.redirect_uri, {
 				error: 'unsupported_response_type'
@@ -244,10 +268,55 @@ app.post("/token", function(req, res){
 			return;
 		}
 	
+	} else if (req.body.grant_type == 'client_credentials') {
+    var rscope = req.body.scope ? req.body.scope.split(' ') : undefined;
+    var cscope = client.scope ? client.scope.split(' ') : undefined;
+    if (__.difference(rscope, cscope).length > 0) {
+      res.status(400).json({error: 'invalid_scope'});
+      return;
+    }
+    
+    var access_token = randomstring.generate();
+
+    var token_response = {access_token: access_token, token_type: 'Bearer', scope: rscope.join(' ')};
+    nosql.insert({access_token: access_token, client_id: clientId, scope: rscope});
+
+    res.status(200).json(token_response);
+    return;
+
 	/*
 	 * Implement the resource owner credentials grant type
 	 */
-	
+  } else if (req.body.grant_type == 'password') {
+    var username = req.body.username;
+    var user = getUser(username);
+    if (!user) {
+      res.status(401).json({error: 'invalid_grant'});
+      return;
+    }
+    
+    var password = req.body.password;
+    if (user.password != password) {
+      console.log('Mismatched resource owner password, expected %s got %s', user.password, password);
+      res.status(401).json({error: 'invalid_grant'});
+      return;
+    }
+    
+    var rscope = req.body.scope ? req.body.scope.split(' '): undefined;
+    var cscope = client.scope ? client.scope.split(' ') : undefined;
+    if (__.difference(rscope, cscope).length > 0) {
+      res.status(401).json({error: 'invalid_scope'});
+      return;
+    }
+    
+    var access_token = randomstring.generate();
+    var refresh_token = randomstring.generate();
+    
+    nosql.insert({access_token: access_token, client_id: clientId, scope: rscope});
+    nosql.insert({refresh_token: refresh_token, client_id: clientId, scope: rscope});
+    
+    var token_response = {access_token: access_token, token_type: 'Bearer', refresh_token: refresh_token, scope: rscope.join(' ')};
+    res.status(200).json(token_response);
 	} else if (req.body.grant_type == 'refresh_token') {
 		nosql.one(function(token) {
 			if (token.refresh_token == req.body.refresh_token) {

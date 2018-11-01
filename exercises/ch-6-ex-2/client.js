@@ -41,7 +41,7 @@ var access_token = null;
 var scope = null;
 
 app.get('/', function (req, res) {
-	res.render('index', {access_token: access_token, refresh_token: refresh_token, scope: scope});
+	res.render('index', {access_token: access_token, scope: scope});
 });
 
 app.get('/authorize', function(req, res){
@@ -52,6 +52,31 @@ app.get('/authorize', function(req, res){
 	/*
 	 * Implement the client credentials flow here
 	 */
+  var form_data = qs.stringify({
+    grant_type: 'client_credentials',
+    scope: client.scope
+  });
+  
+  var headers = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'Authorization': 'Basic ' + encodeClientCredentials(client.client_id, client.client_secret)
+  };
+  
+  var tokRes = request('POST', authServer.tokenEndpoint, {
+    body: form_data,
+    headers: headers
+  });
+  
+  if (tokRes.statusCode >= 200 && tokRes.statusCode < 300) {
+    var body = JSON.parse(tokRes.getBody());
+    
+    access_token = body.access_token;
+    scope = body.scope;
+    
+    res.render('index', {access_token: access_token, scope: scope});
+  } else {
+    res.render('error', {error: 'Unable to fetch access token, server response: ' + toRes.statusCode});
+  }
 	
 });
 

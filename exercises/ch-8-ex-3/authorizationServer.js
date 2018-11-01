@@ -366,11 +366,21 @@ app.post("/token", function(req, res){
 	if (req.body.grant_type == 'authorization_code') {
 		
 		var code = codes[req.body.code];
-		
+
 		if (code) {
 			delete codes[req.body.code]; // burn our code, it's been used
-			if (code.authorizationEndpointRequest.client_id == clientId) {
+      
+      console.log(code);
+      console.log(req.body);
+      
+      if (code.authorizationEndpointRequest.redirect_uri) {
+        if (code.authorizationEndpointRequest.redirect_uri != req.body.redirect_uri) {
+          res.status(400).json({error: 'invalid_grant'});
+          return;
+        }
+      }
 
+			if (code.authorizationEndpointRequest.client_id == clientId) {
 				var user = userInfo[code.user];
 				if (!user) {		
 					console.log('Unknown user %s', user)

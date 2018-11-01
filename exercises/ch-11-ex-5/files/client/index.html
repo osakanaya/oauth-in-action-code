@@ -42,8 +42,11 @@
 		  <p>Refresh token value: <span class="label label-danger"><%- refresh_token ? refresh_token : 'NONE' %></span></p>
 		  <a class="btn btn-default" href="/authorize">Get OAuth Token</a> 
 		  <a class="btn btn-default" href="/fetch_resource">Get Protected Resource</a> 
-		  <form action="/revoke" class="form" method="POST">
-		  <input type="submit" class="btn btn-default" value="Revoke OAuth Token" />
+		  <form action="/revokeAccessToken" class="form" method="POST">
+		  <input type="submit" class="btn btn-default" value="Revoke OAuth Access Token" />
+	  	  </form>
+		  <form action="/revokeRefreshToken" class="form" method="POST">
+		  <input type="submit" class="btn btn-default" value="Revoke OAuth Refresh Token" />
 	  	  </form>
       </div>
 

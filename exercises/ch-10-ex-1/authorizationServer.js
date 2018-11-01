@@ -188,6 +188,25 @@ app.post("/token", function(req, res){
 				/*
 				 * Add code to check PKCE values here
 				 */
+        if (code.request.code_challenge) {
+          console.log('Testing challenge %s against verifier %s', code.request.code_challenge, req.body.code_verifier);
+          
+          if (code.request.code_challenge_method == 'plain') {
+            var code_challenge = req.body.code_verifier;
+          } else if (code.request.code_challenge_method == 'S256') {
+            var code_challenge = base64url.fromBase64(crypto.createHash('sha256').update(req.body.code_verifier).digest('base64'));
+          } else {
+            console.log('Unknown code challenge method', code.request.code_challenge_method);
+            res.status(400).json({error: 'invalid_request'});
+            return;
+          }
+          
+          if (code.request.code_challenge != code_challenge) {
+            console.log('Code challenge did not match, expected %s got %s', code.request.code_challenge, code_challenge);
+            res.status(400).json({error: 'invalid_request'});
+            return;
+          }
+        }
 
 				var access_token = randomstring.generate();
 				var refresh_token = randomstring.generate();

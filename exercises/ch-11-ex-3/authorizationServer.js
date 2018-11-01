@@ -77,7 +77,7 @@ var getUser = function(username) {
 	return userInfo[username];
 };
 
-var rsaKey = {
+/* var rsaKey = {
   "alg": "RS256",
   "d": "ZXFizvaQ0RzWRbMExStaS_-yVnjtSQ9YslYQF1kkuIoTwFuiEQ2OywBfuyXhTvVQxIiJqPNnUyZR6kXAhyj__wS_Px1EH8zv7BHVt1N5TjJGlubt1dhAFCZQmgz0D-PfmATdf6KLL4HIijGrE8iYOPYIPF_FL8ddaxx5rsziRRnkRMX_fIHxuSQVCe401hSS3QBZOgwVdWEb1JuODT7KUk7xPpMTw5RYCeUoCYTRQ_KO8_NQMURi3GLvbgQGQgk7fmDcug3MwutmWbpe58GoSCkmExUS0U-KEkHtFiC8L6fN2jXh1whPeRCa9eoIK8nsIY05gnLKxXTn5-aPQzSy6Q",
   "e": "AQAB",
@@ -85,6 +85,17 @@ var rsaKey = {
   "kty": "RSA",
   "kid": "authserver"
 };
+ */
+
+var rsaKey = {
+  "kty": "RSA",
+  "d": "H6TehtxnJGRTkfwKGaWWs84AEpc-xexZPDb0-AR1RyG4jPy4OoYoUedaliFebC2qDPDK8W_W2MyI-HyV5NwrUacMq9KAY_r6wst70sCB7bjZew_ARAWCQ5qDZv-3if3kPHVxtWA2wSNQixbsr_8PMzY5VW6lE8PI1KOdlQoh_pgCTVdMV1zdpf_uMZmjtObsO-juoduzdBuq7n236-sXWYyIZSSAwLVolQH3XxHeO6Jt1_KRGgmUgmHjiBL9ViyszU2tNd0MCqrppcX20z6450mClv_FtXMw10LjQvh4TEO52kPWrm0uG8ggzHao0CZ-R6G8XXGdSWtfe9wCZ9w1oQ",
+  "e": "AQAB",
+  "use": "sig",
+  "kid": "authserver",
+  "alg": "RS256",
+  "n": "mLa_TCONs3QyyofOVwLyh11_-TNgY76IV8Zpss_qgHikW8q2KguqfeuTEVehi_QNeKBPEQTBgFPiO_nv4_z8t237-3XJYM7jOo59SjRrV-YySyBpViVeWkZCO-4tRnSK8Ll2NnqJHJ4UoYHrKvnghgWDzS03BANA7oOy8sx67IOP4Lf7EIiaxkfwIdxCcCFGOj92lpSbrWw8LQMxLyThgeVwqBbpF5lc24SUy0velELs0uRNEvJ6FCWng7dAzS8T9AgFF5f8_-IDfKBE3A8I6tp2gxrc6aS2BYISdTFy7WkH8bGA76UPAiWGE5tQ8Ju-YeZazKRIZoH-tH7h9Tztiw"
+}
 
 app.get('/', function(req, res) {
 	res.render('index', {clients: clients, authServer: authServer});
@@ -232,7 +243,7 @@ app.post("/token", function(req, res){
 				 * Create a signed JWT using RS256 instead of this unsigned one
 				 */
 				
-				var header = { 'typ': 'JWT', 'alg': 'none' };
+				var header = { 'typ': 'JWT', 'alg': rsaKey.alg, 'kid': rsaKey.kid };
 				var payload = {
 					iss: 'http://localhost:9001/',
 					sub: code.user ? code.user.sub : undefined,
@@ -242,11 +253,15 @@ app.post("/token", function(req, res){
 					jti: randomstring.generate(8)
 				};
 				
-				var access_token = base64url.encode(JSON.stringify(header))
-					+ '.'
-					+ base64url.encode(JSON.stringify(payload))
-					+ '.';
-
+        console.log(header);
+        
+        var privateKey = jose.KEYUTIL.getKey(rsaKey);
+        
+        var access_token = jose.jws.JWS.sign(header.alg,
+          JSON.stringify(header),
+          JSON.stringify(payload),
+          privateKey);
+        
 				nosql.insert({ access_token: access_token, client_id: clientId, scope: code.scope, user: code.user });
 
 				console.log('Issuing access token %s', access_token);

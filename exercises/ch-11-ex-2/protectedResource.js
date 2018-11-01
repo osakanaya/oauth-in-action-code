@@ -58,28 +58,33 @@ var getAccessToken = function(req, res, next) {
 	/*
 	 * Validate the signature of the JWT
 	 */
-
-	if (payload.iss == 'http://localhost:9001/') {
-		console.log('issuer OK');
-		if ((Array.isArray(payload.aud) && __.contains(payload.aud, 'http://localhost:9002/')) || 
-			payload.aud == 'http://localhost:9002/') {
-			console.log('Audience OK');
-			
-			var now = Math.floor(Date.now() / 1000);
-			
-			if (payload.iat <= now) {
-				console.log('issued-at OK');
-				if (payload.exp >= now) {
-					console.log('expiration OK');
-					
-					console.log('Token valid!');
-	
-					req.access_token = payload;
-					
-				}
-			}
-		}
-		
+  
+  if (jose.jws.JWS.verify(inToken,
+    new Buffer(sharedTokenSecret).toString('hex'),
+    [header.alg])) {
+      console.log('Signature validated');
+      
+    if (payload.iss == 'http://localhost:9001/') {
+      console.log('issuer OK');
+      if ((Array.isArray(payload.aud) && __.contains(payload.aud, 'http://localhost:9002/')) || 
+        payload.aud == 'http://localhost:9002/') {
+        console.log('Audience OK');
+        
+        var now = Math.floor(Date.now() / 1000);
+        
+        if (payload.iat <= now) {
+          console.log('issued-at OK');
+          if (payload.exp >= now) {
+            console.log('expiration OK');
+            
+            console.log('Token valid!');
+    
+            req.access_token = payload;
+            
+          }
+        }
+      }
+    }
 	}
 			
 	next();

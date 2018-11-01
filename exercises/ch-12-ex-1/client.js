@@ -51,6 +51,14 @@ app.get('/authorize', function(req, res){
 	/*
 	 * If the client hasn't been registered yet, call the registerClient function
 	 */
+	if (!client.client_id) {
+    registerClient();
+    
+    if (!client.client_id) {
+      res.render('error', {error: 'Unable to register client.'});
+      return;
+    }
+  }
 
 	access_token = null;
 	refresh_token = null;
@@ -168,7 +176,35 @@ var registerClient = function() {
 	/*
 	 * Call the registration endpoint with your desired client information and save the results
 	 */
-	
+  var template = {
+    client_name: 'OAuth in Action Dynamic Test Client',
+    client_uri: 'http://localhost:9000/',
+    redirect_uris: ['http://localhost:9000/callback'],
+    grant_types: ['authorization_code'],
+    response_types: ['code'],
+    token_endpoint_auth_method: 'secret_basic'
+  };
+  
+  var headers = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  };
+  
+  var regRes = request('POST', authServer.registrationEndpoint, {
+    body: JSON.stringify(template),
+    headers: headers
+  });
+  
+  console.log(regRes);
+  
+  if (regRes.statusCode == 201) {
+    var body = JSON.parse(regRes.getBody());
+    console.log('Got registered client', body);
+    
+    if (body.client_id) {
+      client = body;
+    }
+  }
 };
 
 app.use('/', express.static('files/client'));

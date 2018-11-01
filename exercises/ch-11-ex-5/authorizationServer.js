@@ -186,8 +186,8 @@ app.post("/token", function(req, res){
 				var access_token = randomstring.generate();
 				var refresh_token = randomstring.generate();
 
-				nosql.insert({ access_token: access_token, client_id: clientId, scope: code.scope });
-				nosql.insert({ refresh_token: refresh_token, client_id: clientId, scope: code.scope });
+				nosql.insert({ type: 'access_token', access_token: access_token, refresh_token: refresh_token, client_id: clientId, scope: code.scope });
+				nosql.insert({ type: 'refresh_token', refresh_token: refresh_token, client_id: clientId, scope: code.scope });
 
 				console.log('Issuing access token %s', access_token);
 
@@ -211,14 +211,15 @@ app.post("/token", function(req, res){
 		}
 	} else if (req.body.grant_type == 'refresh_token') {
 		nosql.one(function(token) {
-			if (token.refresh_token == req.body.refresh_token) {
+//      console.log(token);
+			if (token.refresh_token == req.body.refresh_token && token.type == 'refresh_token') {
 				return token;	
 			}
 		}, function(err, token) {
 			if (token) {
 				console.log("We found a matching refresh token: %s", req.body.refresh_token);
 				if (token.client_id != clientId) {
-					nosql.remove(function(found) { return (found == token); }, function () {} );
+					nosql.remove(function(found) { return (found == token && type == 'refresh_token'); }, function () {} );
 					res.status(400).json({error: 'invalid_grant'});
 					return;
 				}
@@ -228,7 +229,7 @@ app.post("/token", function(req, res){
 				 */
 				
 				var access_token = randomstring.generate();
-				nosql.insert({ access_token: access_token, client_id: clientId });
+				nosql.insert({ type: 'access_token', access_token: access_token, refresh_token: refresh_token, client_id: clientId });
 				var token_response = { access_token: access_token, token_type: 'Bearer',  refresh_token: token.refresh_token };
 				res.status(200).json(token_response);
 				return;
@@ -244,11 +245,98 @@ app.post("/token", function(req, res){
 	}
 });
 
-app.post('/revoke', function(req, res) {
+app.post('/revokeAccessToken', function(req, res) {
 
 	/*
 	 * Implement the token revocation endpoint
 	 */
+  var auth = req.headers['authorization'];
+  if (auth) {
+    var clientCredentials = decodeClientCredentials(auth);
+    var clientId = clientCredentials.id;
+    var clientSecret = clientCredentials.secret;
+  }
+  
+  if (req.body.client_id) {
+    if (clientId) {
+      console.log('Client attempted to authenticate with multiple methods');
+      res.status(401).json({error: 'invalid_client'});
+      return;
+    }
+    
+    var clientId = req.body.client_id;
+    var clientSecret = req.body.client_secret;
+  }
+  
+  var client = getClient(clientId);
+  if (!client) {
+    console.log('Unknown client %s', clientId);
+    res.status(401).json({error: 'invalid_client'});
+    return;
+  }
+  
+  if (client.client_secret != clientSecret) {
+    console.log('Mismatched client secret, expected %s got %s', client.client_secret, clientSecret);
+    res.status(401).json({error: 'invalid_client'});
+    return;
+  }
+  
+  var inToken = req.body.token;
+  nosql.remove(function(token) {
+    if (token.type == 'access_token' && token.access_token == inToken && token.client_id == clientId) {
+      return true;
+    }
+  }, function(err, count) {
+    console.log("Removed %s tokens", count);
+    res.status(204).end();
+    return;
+  });
+	
+});
+
+app.post('/revokeRefreshToken', function(req, res) {
+
+  var auth = req.headers['authorization'];
+  if (auth) {
+    var clientCredentials = decodeClientCredentials(auth);
+    var clientId = clientCredentials.id;
+    var clientSecret = clientCredentials.secret;
+  }
+  
+  if (req.body.client_id) {
+    if (clientId) {
+      console.log('Client attempted to authenticate with multiple methods');
+      res.status(401).json({error: 'invalid_client'});
+      return;
+    }
+    
+    var clientId = req.body.client_id;
+    var clientSecret = req.body.client_secret;
+  }
+  
+  var client = getClient(clientId);
+  if (!client) {
+    console.log('Unknown client %s', clientId);
+    res.status(401).json({error: 'invalid_client'});
+    return;
+  }
+  
+  if (client.client_secret != clientSecret) {
+    console.log('Mismatched client secret, expected %s got %s', client.client_secret, clientSecret);
+    res.status(401).json({error: 'invalid_client'});
+    return;
+  }
+  
+  var inToken = req.body.token;
+  nosql.remove(function(token) {
+    if (token.refresh_token == inToken && token.client_id == clientId) {
+      return true;
+    }
+  }, function(err, count) {
+    console.log("Removed %s tokens", count);
+    res.status(204).end();
+    return;
+  });
 	
 });
 

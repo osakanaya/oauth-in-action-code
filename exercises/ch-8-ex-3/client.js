@@ -147,13 +147,15 @@ app.get("/callback", function(req, res){
 				code: code,
 //				client_id: client.client_id,
 //				client_secret: client.client_secret,
-				redirect_uri: client.redirect_uri
+				redirect_uri: client.redirect_uris[0]
 			});
 	var headers = {
 		'Content-Type': 'application/x-www-form-urlencoded',
 		'Authorization': 'Basic ' + new Buffer(querystring.escape(client.client_id) + ':' + querystring.escape(client.client_secret)).toString('base64')
 	};
 
+  console.log(form_data);
+  
 	var tokRes = request('POST', authServer.tokenEndpoint, 
 		{	
 			body: form_data,

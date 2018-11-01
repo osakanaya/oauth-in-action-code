@@ -34,7 +34,8 @@ var client = {
 var authServer = {
 	authorizationEndpoint: 'http://localhost:9001/authorize',
 	tokenEndpoint: 'http://localhost:9001/token',
-	revocationEndpoint: 'http://localhost:9001/revoke'
+	accessRevocationEndpoint: 'http://localhost:9001/revokeAccessToken',
+	refreshRevocationEndpoint: 'http://localhost:9001/revokeRefreshToken',
 };
 
 var protectedResource = 'http://localhost:9002/resource';
@@ -129,13 +130,23 @@ app.get("/callback", function(req, res){
 });
 
 app.get('/fetch_resource', function(req, res) {
-
+/* 
 	if (!access_token) {
 		res.render('error', {error: 'Missing access token.'});
 		return;
 	}
-	
-	console.log('Making request with access token %s', access_token);
+ */	
+ 
+ if (!access_token) {
+   if (refresh_token) {
+     refreshAccessToken(req, res);
+   } else {
+     res.render('error', {error: 'Missing access token and refresh token.'});
+     return;
+   }
+ }
+ 
+ console.log('Making request with access token %s', access_token);
 	
 	var headers = {
 		'Authorization': 'Bearer ' + access_token,
@@ -164,11 +175,109 @@ app.get('/fetch_resource', function(req, res) {
 	
 });
 
-app.post('/revoke', function(req, res) {
+var refreshAccessToken = function(req, res) {
+	var form_data = qs.stringify({
+				grant_type: 'refresh_token',
+				refresh_token: refresh_token,
+				client_id: client.client_id,
+				client_secret: client.client_secret,
+				redirect_uri: client.redirect_uri
+			});
+	var headers = {
+		'Content-Type': 'application/x-www-form-urlencoded'
+	};
+	console.log('Refreshing token %s', refresh_token);
+	var tokRes = request('POST', authServer.tokenEndpoint, 
+		{	
+			body: form_data,
+			headers: headers
+		}
+	);
+	if (tokRes.statusCode >= 200 && tokRes.statusCode < 300) {
+		var body = JSON.parse(tokRes.getBody());
+
+		access_token = body.access_token;
+		console.log('Got access token: %s', access_token);
+		if (body.refresh_token) {
+			refresh_token = body.refresh_token;
+			console.log('Got refresh token: %s', refresh_token);
+		}
+		scope = body.scope;
+		console.log('Got scope: %s', scope);
+	
+		// try again
+		res.redirect('/fetch_resource');
+		return;
+	} else {
+		console.log('No refresh token, asking the user to get a new access token');
+		// tell the user to get a new access token
+		res.redirect('/authorize');
+		return;
+	}
+};
+
+app.post('/revokeAccessToken', function(req, res) {
 
 	/*
 	 * Call the token revocation endpoint and throw out all our tokens
 	 */
+  var form_data = qs.stringify({
+    token: access_token
+  });
+  
+  var headers = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'Authorization': 'Basic ' + encodeClientCredentials(client.client_id, client.client_secret)
+  };
+  
+	console.log('Revoking access token %s', access_token);
+  var tokRes = request('POST', authServer.accessRevocationEndpoint, {
+    body: form_data,
+    headers: headers
+  });
+  
+  access_token = null;
+//  refresh_token = null;
+  scope = null;
+  
+  if (tokRes.statusCode >= 200 && tokRes.statusCode < 300) {
+    res.render('index', {access_token: access_token, refresh_token: refresh_token, scope: scope});
+    return;
+  } else {
+    res.render('error', {'error': tokRes.statusCode});
+    return;
+  }
+
+});
+
+app.post('/revokeRefreshToken', function(req, res) {
+
+  var form_data = qs.stringify({
+    token: refresh_token
+  });
+  
+  var headers = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'Authorization': 'Basic ' + encodeClientCredentials(client.client_id, client.client_secret)
+  };
+  
+	console.log('Revoking refresh token %s', access_token);
+  var tokRes = request('POST', authServer.refreshRevocationEndpoint, {
+    body: form_data,
+    headers: headers
+  });
+  
+  access_token = null;
+  refresh_token = null;
+  scope = null;
+  
+  if (tokRes.statusCode >= 200 && tokRes.statusCode < 300) {
+    res.render('index', {access_token: access_token, refresh_token: refresh_token, scope: scope});
+    return;
+  } else {
+    res.render('error', {'error': tokRes.statusCode});
+    return;
+  }
 
 });
 
