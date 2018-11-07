@@ -132,7 +132,46 @@ app.get("/callback", function(req, res){
 		/*
 		 * Parse and validate the ID token
 		 */
-		
+		if (body.id_token) {
+      userInfo = null;
+      id_token = null;
+      
+      console.log('Got ID token: %s', body.id_token);
+      
+      var publicKey = jose.KEYUTIL.getKey(rsaKey);
+      var tokenParts = body.id_token.split('.');
+      var payload = JSON.parse(base64url.decode(tokenParts[1]));
+      console.log('Payload', payload);
+      
+      if (jose.jws.JWS.verify(body.id_token, publicKey, [rsaKey.alg])) {
+        console.log('Signature validated.');
+        
+        if (payload.iss == 'http://localhost:9001/') {
+          console.log('issuer OK');
+          
+          if ((Array.isArray(payload.aud) && __.contains(payload.aud, client.client_id)) || payload.aud == client.client_id) {
+            console.log('audience OK');
+            
+            var now = Math.floor(Date.now() / 1000);
+            
+            if (payload.iat <= now) {
+              console.log('issued-at OK');
+              
+              if (payload.exp >= now) {
+                console.log('expiration OK');
+                console.log('Token valid.');
+                
+                id_token = payload;
+              }
+            }
+          }
+        }
+      }
+      
+      res.render('userinfo', { userInfo: userInfo, id_token: id_token });
+      return;
+    }
+    
 		res.render('index', {access_token: access_token, refresh_token: refresh_token, scope: scope});
 		return;
 
@@ -177,7 +216,26 @@ app.get('/userinfo', function(req, res) {
 	/*
 	 * Call the UserInfo endpoint and store/display the results
 	 */
-	
+	var headers = {
+    'Authorization': 'Bearer ' + access_token
+  };
+  
+  var resource = request('GET', authServer.userInfoEndpoint, {
+    headers: headers
+  });
+  
+  if (resource.statusCode >= 200 && resource.statusCode < 300) {
+    var body = JSON.parse(resource.getBody());
+    console.log('Got data: ', body);
+    
+    userInfo = body;
+    
+    res.render('userInfo', { userInfo: userInfo, id_token: id_token });
+    return;
+  } else {
+    res.render('error', { error: 'Unable to fetch user information' });
+    return;
+  }
 });
 
 app.use('/', express.static('files/client'));
