@@ -200,6 +200,35 @@ app.post("/token", function(req, res){
 				/*
 				 * Generate an access token and associated key, store them, and return them
 				 */
+        keystore.generate('RSA', 2048).then(function(key) {
+          var access_token = randomstring.generate();
+          
+          var access_token_key = key.toJSON(true);
+          var access_token_public_key = key.toJSON();
+          
+          var token_response = {
+            access_token: access_token,
+            access_token_key: access_token_key,
+            token_type: 'PoP',
+            refresh_token: req.body.refresh_token,
+            scope: code.scope,
+            alg: 'RS256'
+          };
+          
+          nosql.insert({
+            access_token: access_token,
+            access_token_key: access_token_public_key,
+            client_id: clientId,
+            scope: code.scope,
+            iat: Math.floor(Date.now() / 1000),
+            exp: Math.floor(Date.now() / 1000) + (5 * 60)
+          });
+          
+          res.status(200).json(token_response);
+          console.log('Issued tokens for code %s', req.body.code);
+          
+          return;
+        });
 
 			} else {
 				console.log('Client mismatch, expected %s got %s', code.request.client_id, clientId);
@@ -253,12 +282,15 @@ app.post('/introspect', function(req, res) {
 				sub: token.user ? token.user.sub : undefined,
 				username: token.user ? token.user.preferred_username : undefined,
 				scope: token.scope ? token.scope.join(' ') : undefined,
-				client_id: token.client_id
+				client_id: token.client_id,
+        iat: token.iat,
+        exp: token.exp
 			};
 			
 			/*
 			 * Add in the key and algorithm associated with the token to the introspection response
 			 */
+      introspectionResponse.access_token_key = token.access_token_key;
 						
 			res.status(200).json(introspectionResponse);
 			return;
