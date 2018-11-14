@@ -24,13 +24,17 @@ app.set('json spaces', 4);
 app.use('/', express.static('files/protectedResource'));
 app.use(cors());
 
+// クライアントアプリケーションに返却するリソースデータ
 var resource = {
 	"name": "Protected Resource",
 	"description": "This data has been protected by OAuth 2.0"
 };
 
+// TODO:この共有鍵はどこで使われるの？
 var sharedTokenSecret = "shared token secret!";
 
+// 認可サーバの公開鍵
+// TODO:この公開鍵はどこで使われるの？
 var rsaKey = {
   "alg": "RS256",
   "e": "AQAB",
@@ -39,30 +43,34 @@ var rsaKey = {
   "kid": "authserver"
 };
 
+// 保護リソースのリソースIDとリソースシークレット
 var protectedResources = {
 		"resource_id": "protected-resource-1",
 		"resource_secret": "protected-resource-secret-1"
 };
 
+// 認可サーバのIntrospection EndpointのURL
 var authServer = {
 	introspectionEndpoint: 'http://localhost:9001/introspect'
 };
 
-
+// リクエストに含まれるアクセストークンを取得する
 var getAccessToken = function(req, res, next) {
-	// check the auth header first
+
+  // Authorizationヘッダにアクセストークンが指定されたかをチェック
 	var auth = req.headers['authorization'];
 	var inToken = null;
 	if (auth && auth.toLowerCase().indexOf('bearer') == 0) {
 		inToken = auth.slice('bearer '.length);
 	} else if (req.body && req.body.access_token) {
-		// not in the header, check in the form body
+    // フォームパラメータにアクセストークンが指定された場合
 		inToken = req.body.access_token;
 	} else if (req.query && req.query.access_token) {
+    // クエリパラメータにアクセストークンが指定された場合
 		inToken = req.query.access_token
 	}
 	
-	console.log('Incoming token: %s', inToken);
+	console.log('クライアントアプリケーションから受信したアクセストークン： %s', inToken);
 	/*
 	nosql.one(function(token) {
 		if (token.access_token == inToken) {
@@ -79,6 +87,7 @@ var getAccessToken = function(req, res, next) {
 		return;
 	});
 	*/
+  // TODO:アクセストークンがJWT形式の場合、その内容を検証する
 	/*
 	//var signatureValid = jose.jws.JWS.verify(inToken, new Buffer(sharedTokenSecret).toString('hex'), ['HS256']);
 	var pubKey = jose.KEYUTIL.getKey(rsaKey);
@@ -117,11 +126,13 @@ var getAccessToken = function(req, res, next) {
 	return;
 	*/
 	
+  // Introspection Endpointにアクセストークンの情報を問い合わせる
 	var form_data = qs.stringify({
 		token: inToken
 	});
 	var headers = {
 		'Content-Type': 'application/x-www-form-urlencoded',
+    // Authorizationヘッダには、保護リソースのリソースIDとリソースシークレットを指定する
 		'Authorization': 'Basic ' + new Buffer(querystring.escape(protectedResources.resource_id) + ':' + querystring.escape(protectedResources.resource_secret)).toString('base64')
 	};
 
@@ -133,9 +144,10 @@ var getAccessToken = function(req, res, next) {
 	);
 	
 	if (tokRes.statusCode >= 200 && tokRes.statusCode < 300) {
-		var body = JSON.parse(tokRes.getBody());
+    // 認可サーバ上でも当該アクセストークンがアクティブであれば、よしとする
+    var body = JSON.parse(tokRes.getBody());
 	
-		console.log('Got introspection response', body);
+		console.log('Introspection Endpointからの応答： ', body);
 		var active = body.active;
 		if (active) {
 			req.access_token = body;
@@ -226,11 +238,15 @@ app.get('/favorites', getAccessToken, requireAccessToken, function(req, res) {
 	}
 });
 
+// CORS対応（Implicit Grantが対象とするJavascriptアプリケーション用）
 app.options('/resource', cors());
 
+// 基本的なデータを取得する
 app.post("/resource", cors(), getAccessToken, function(req, res){
 
+  // アクセストークンが指定されたかどうかをチェックする
 	if (req.access_token) {
+    // アクセストークンがあれば、リソースを返却する
 		res.json(resource);
 	} else {
 		res.status(401).end();

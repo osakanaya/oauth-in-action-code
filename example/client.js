@@ -21,15 +21,16 @@ app.engine('html', cons.underscore);
 app.set('view engine', 'html');
 app.set('views', 'files/client');
 
-// authorization server information
+// 認可サーバの情報
 var authServer = {
-	authorizationEndpoint: 'http://localhost:9001/authorize',
-	tokenEndpoint: 'http://localhost:9001/token',
-	revocationEndpoint: 'http://localhost:9001/revoke',
-	registrationEndpoint: 'http://localhost:9001/register',
-	userInfoEndpoint: 'http://localhost:9001/userinfo'
+	authorizationEndpoint: 'http://localhost:9001/authorize', // Authorization Endpoint
+	tokenEndpoint: 'http://localhost:9001/token',             // Token Endopoint
+	revocationEndpoint: 'http://localhost:9001/revoke',       // Revocation Endpoint
+	registrationEndpoint: 'http://localhost:9001/register',   // Registration Endpoint
+	userInfoEndpoint: 'http://localhost:9001/userinfo'        // Userinfo Endpoint
 };
 
+// 認可サーバの公開鍵
 var rsaKey = {
   "alg": "RS256",
   "e": "AQAB",
@@ -38,48 +39,56 @@ var rsaKey = {
   "kid": "authserver"
 };
 
-// client information
-
+// クライアント情報
+// TODO:この情報を消して、Dyanmic Registrationを作動させる
 var client = {
-	"client_id": "oauth-client-1",
-	"client_secret": "oauth-client-secret-1",
-	"redirect_uris": ["http://localhost:9000/callback"],
-	"scope": "foo bar"
+	"client_id": "oauth-client-1",                        // クライアントID
+	"client_secret": "oauth-client-secret-1",             // クライアントシークレット
+	"redirect_uris": ["http://localhost:9000/callback"],  // リダイレクトURI
+	"scope": "foo bar"                                    // 認可サーバに登録したクライアントが要求するスコープ
 };
 
-//var client = {};
-
+// 保護リソースが効果するAPIのURL
 var protectedResource = 'http://localhost:9002/resource';
 var wordApi = 'http://localhost:9002/words';
 var produceApi = 'http://localhost:9002/produce';
 var favoritesApi = 'http://localhost:9002/favorites';
 
+// 認可コードの取得に使用するstateパラメータ
 var state = null;
 
-var access_token = null;
-var refresh_token = null;
-var scope = null;
-var id_token = null;
+var access_token = null;    // アクセストークン
+var refresh_token = null;   // リフレッシュトークン
+var scope = null;           // 実際にリソースオーナーによって認可サーバから委譲されたスコープ
+var id_token = null;        // IDトークン
 
+// トップページを表示する
 app.get('/', function (req, res) {
 	res.render('index', {access_token: access_token, refresh_token: refresh_token, scope: scope});
 });
 
+// 認可サーバにリダイレクトする
 app.get('/authorize', function(req, res){
 
 	if (!client.client_id) {
+    // クライアント情報が登録されていなかったら、Registration Endpointを使ってクライアントを登録する
 		registerClient();
 		if (!client.client_id) {
-			res.render('error', {error: 'Unable to register client.'});
+      // クライアント情報が登録できなかったらエラー
+			res.render('error', {error: 'クライアントアプリケーションを登録できませんでした。'});
 			return;
 		}
 	}
 	
+  // アクセストークンなどをいったんクリアする
 	access_token = null;
 	refresh_token = null;
 	scope = null;
+  
+  // 認可コードの発行依頼に際し、stateパラメータを生成する
 	state = randomstring.generate();
 	
+  // Authorization Endpointにリダイレクトする
 	var authorizeUrl = buildUrl(authServer.authorizationEndpoint, {
 		response_type: 'code',
 		scope: client.scope,
@@ -88,7 +97,7 @@ app.get('/authorize', function(req, res){
 		state: state
 	});
 	
-	console.log("redirect", authorizeUrl);
+	console.log("リダイレクト先：", authorizeUrl);
 	res.redirect(authorizeUrl);
 });
 
@@ -125,25 +134,29 @@ var registerClient = function() {
 	}
 };
 
+// 認可サーバでの認可を受け取るコールバック
 app.get("/callback", function(req, res){
 
 	if (req.query.error) {
-		// it's an error response, act accordingly
+    // 認可の同意画面で拒否された場合や、登録されていないスコープを要求した場合
 		res.render('error', {error: req.query.error});
 		return;
 	}
 	
+  // リクエスト時に送信したstateパラメータと、認可サーバから受け取ったstateパラメータが等しいことをチェックする
 	var resState = req.query.state;
 	if (resState == state) {
-		console.log('State value matches: expected %s got %s', state, resState);
+		console.log('stateパラメータの値がマッチしました。（認可コード発行リクエスト時の値：%s, 認可サーバから受け取った値：%s）', state, resState);
 	} else {
-		console.log('State DOES NOT MATCH: expected %s got %s', state, resState);
-		res.render('error', {error: 'State value did not match'});
+		console.log('stateパラメータの値がマッチしません。（認可コード発行リクエスト時の値：%s, 認可サーバから受け取った値：%s）', state, resState);
+		res.render('error', {error: 'stateパラメータの値がマッチしません'});
 		return;
 	}
 
+  // 認可サーバが発行した認可コードを抽出する
 	var code = req.query.code;
 
+  // Token Endpointにアクセストークン発行をリクエストする
 	var form_data = qs.stringify({
 				grant_type: 'authorization_code',
 				code: code,
@@ -151,6 +164,7 @@ app.get("/callback", function(req, res){
 			});
 	var headers = {
 		'Content-Type': 'application/x-www-form-urlencoded',
+    // クライアントアプリケーションのクライアントIDとクライアントシークレットを設定する
 		'Authorization': 'Basic ' + new Buffer(querystring.escape(client.client_id) + ':' + querystring.escape(client.client_secret)).toString('base64')
 	};
 
@@ -161,43 +175,61 @@ app.get("/callback", function(req, res){
 		}
 	);
 
-	console.log('Requesting access token for code %s',code);
+	console.log('認可コード：%s に対するアクセストークンをリクエストしています...',code);
 	
 	if (tokRes.statusCode >= 200 && tokRes.statusCode < 300) {
+    // 正常終了した場合
 		var body = JSON.parse(tokRes.getBody());
-	
+
+    // 発行されたアクセストークンを取得する
 		access_token = body.access_token;
-		console.log('Got access token: %s', access_token);
+		console.log('アクセストークンが発行されました： %s', access_token);
+
 		if (body.refresh_token) {
+      // リフレッシュトークンが発行された場合
+      // TODO:リフレッシュトークンの発行を試みる
 			refresh_token = body.refresh_token;
-			console.log('Got refresh token: %s', refresh_token);
+			console.log('リフレッシュトークンが発行されました： %s', refresh_token);
 		}
-		
+
 		if (body.id_token) {
-			console.log('Got ID token: %s', body.id_token);
+      // IDトークンが発行された場合
+      // TODO:IDトークンの発行を試みる
+			console.log('IDトークンが発行されました： %s', body.id_token);
 			
-			// check the id token
+      /*
+        IDトークンが正当性を検証する
+      */
+      
+      // 認可サーバの公開鍵で、IDトークンの署名を検証する
 			var pubKey = jose.KEYUTIL.getKey(rsaKey);
 			var signatureValid = jose.jws.JWS.verify(body.id_token, pubKey, ['RS256']);
 			if (signatureValid) {
-				console.log('Signature validated.');
+        // 署名が正しい場合
+				console.log('署名が検証されました。');
+        // IDトークンのPayloadを抽出し、Base64URLデコードする
 				var tokenParts = body.id_token.split('.');
 				var payload = JSON.parse(base64url.decode(tokenParts[1]));
-				console.log('Payload', payload);
+				console.log('IDトークンのペイロード：', payload);
+
 				if (payload.iss == 'http://localhost:9001/') {
-					console.log('issuer OK');
+          // IDトークンが期待される認可サーバ（IdP）から発行されたかをチェック
+					console.log('IDトークンの発行元　＝　OK');
+
 					if ((Array.isArray(payload.aud) && _.contains(payload.aud, client.client_id)) || 
 						payload.aud == client.client_id) {
-						console.log('Audience OK');
+            // IDトークンの発行先が自分自身であることをチェック
+						console.log('IDトークンの発行先　＝　OK');
 				
+            // IDトークンの有効期限内であることをチェック
 						var now = Math.floor(Date.now() / 1000);
 				
 						if (payload.iat <= now) {
-							console.log('issued-at OK');
+							console.log('IDトークンの発行時刻≦現在時刻　＝　OK');
 							if (payload.exp >= now) {
-								console.log('expiration OK');
+								console.log('IDトークンの有効期限≧現在時刻　＝　OK');
 						
-								console.log('Token valid!');
+								console.log('IDトークンは正しいです！');
 		
 								id_token = payload;
 						
@@ -213,16 +245,21 @@ app.get("/callback", function(req, res){
 			
 		}
 		
+    // スコープを抽出する
 		scope = body.scope;
-		console.log('Got scope: %s', scope);
+		console.log('実際に認可されたスコープ： %s', scope);
 
+    // トップページを表示する
 		res.render('index', {access_token: access_token, refresh_token: refresh_token, scope: scope});
 	} else {
 		res.render('error', {error: 'Unable to fetch access token, server response: ' + tokRes.statusCode})
 	}
 });
 
+// リフレッシュトークンからアクセストークンを再発行する
 var refreshAccessToken = function(req, res) {
+  // Token Endpointへリクエストする
+  // TODO:クライアントIDとクライアントシークレットは、Authorizationヘッダに設定すべきでは？（たぶんバグ）
 	var form_data = qs.stringify({
 				grant_type: 'refresh_token',
 				refresh_token: refresh_token,
@@ -233,52 +270,66 @@ var refreshAccessToken = function(req, res) {
 	var headers = {
 		'Content-Type': 'application/x-www-form-urlencoded'
 	};
-	console.log('Refreshing token %s', refresh_token);
+	console.log('リフレッシュトークンを使ってアクセストークンを再発行します： %s', refresh_token);
 	var tokRes = request('POST', authServer.tokenEndpoint, 
 		{	
 			body: form_data,
 			headers: headers
 		}
 	);
+  
+  // アクセストークンが再発行された場合
 	if (tokRes.statusCode >= 200 && tokRes.statusCode < 300) {
 		var body = JSON.parse(tokRes.getBody());
 
 		access_token = body.access_token;
-		console.log('Got access token: %s', access_token);
+		console.log('アクセストークンが再発行されました： %s', access_token);
+
+    // リフレッシュトークンも受信した場合
 		if (body.refresh_token) {
 			refresh_token = body.refresh_token;
-			console.log('Got refresh token: %s', refresh_token);
+			console.log('リフレッシュトークンが発行されました %s', refresh_token);
 		}
+    
 		scope = body.scope;
-		console.log('Got scope: %s', scope);
+		console.log('実際に認可されたスコープ： %s', scope);
 	
-		// try again
+    // 再度、リダイレクトして保護リソースへのアクセスを試みる
 		res.redirect('/fetch_resource');
 		return;
 	} else {
-		console.log('No refresh token, asking the user to get a new access token');
-		// tell the user to get a new access token
+    // リフレッシュトークンからアクセストークンが再発行できなかった場合
+		console.log('リフレッシュトークンが無いため、ユーザに新しいアクセストークンを取得するように要求します');
+    
+    // 認可サーバの同意画面へ結果的にリダイレクトする
 		res.redirect('/authorize');
 		return;
 	}
 };
 
+// 保護リソースにアクセスする
+// TODO:他の保護リソースへのアクセスを実現する
+// TODO:IDトークンの正当性をチェックする（有効期限）
+// TODO:アクセストークンのみのRevocationを試す（リフレッシュトークンによる発行を確認するため）
 app.get('/fetch_resource', function(req, res) {
 
 	if (!access_token) {
+    // アクセストークンがない場合
 		if (refresh_token) {
-			// try to refresh and start again
+      // リフレッシュトークンがある場合は、アクセストークンを新規に発行する
 			refreshAccessToken(req, res);
 			return;
 		} else {
-			res.render('error', {error: 'Missing access token.'});
+      // リフレッシュトークンがない場合＝アクセストークンも無いので、保護リソースへのアクセスは拒否する
+			res.render('error', {error: 'アクセストークンがありません'});
 			return;
 		}
 	}
 	
-	console.log('Making request with access token %s', access_token);
+	console.log('保護リソースへリクエストします。 アクセストークン： %s', access_token);
 	
 	var headers = {
+    // Authorizationヘッダにはアクセストークンを設定する
 		'Authorization': 'Bearer ' + access_token,
 		'Content-Type': 'application/x-www-form-urlencoded'
 	};
@@ -288,17 +339,21 @@ app.get('/fetch_resource', function(req, res) {
 	);
 	
 	if (resource.statusCode >= 200 && resource.statusCode < 300) {
+    // 保護リソースへのアクセスが正常終了した場合
 		var body = JSON.parse(resource.getBody());
 		res.render('data', {resource: body});
 		return;
 	} else {
+    // 保護リソースへのアクセスでエラーがあった場合
+    
+    // アクセストークンをクリアする
 		access_token = null;
 		if (refresh_token) {
-			// try to refresh and start again
+      // リフレッシュトークンがあれば、アクセストークンを再発行し、再度保護リソースへのアクセスを試みる
 			refreshAccessToken(req, res);
 			return;
 		} else {
-			res.render('error', {error: 'Server returned response code: ' + resource.statusCode});
+			res.render('error', {error: 'サーバがレスポンスコードを返しました： ' + resource.statusCode});
 			return;
 		}
 	}

@@ -5,7 +5,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
-    <title>OAuth in Action: OAuth Authorization Server</title>
+    <title>サンプルプログラム：認可サーバ</title>
 
     <!-- Bootstrap -->
 	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
@@ -29,7 +29,7 @@
     <nav class="navbar navbar-inverse navbar-fixed-top">
       <div class="container">
         <div class="navbar-header">
-          <a class="navbar-brand" href="/">OAuth in Action: <span class="label label-danger">OAuth Authorization Server</label></a>
+          <a class="navbar-brand" href="/">サンプルプログラム： <span class="label label-danger">認可サーバ</label></a>
         </div>
       </div>
     </nav>
@@ -37,19 +37,21 @@
     <div class="container">
 
       <div class="jumbotron">
-		  <h2>Client information:</h2>
+		  <h2>クライアント情報：</h2>
 		  <% _.each(clients, function(client) { %>
 		  <ul>
-			  <li><b>client_id:</b> <code><%- client.client_id %></code></li>
-			  <li><b>client_secret:</b> <code><%- client.client_secret %></code></li>
-			  <li><b>scope:</b> <code><%- client.scope %></code></li>
-			  <li><b>redirect_uri:</b> <code><%- client.redirect_uri %></code></li>
+			  <li><b>クライアントID：</b> <code><%- client.client_id %></code></li>
+			  <li><b>クライアントシークレット：</b> <code><%- client.client_secret %></code></li>
+			  <li><b>スコープ：</b> <code><%- client.scope %></code></li>
+			  <li><b>リダイレクトURI：</b> <code><%- client.redirect_uri %></code></li>
 		   </ul>
 		   <% }); %>
-		   <h2>Server information:</h2>
+		   <h2>サーバ情報：</h2>
 		  <ul>
-			  <li><b>authorization_endpoint:</b> <code><%- authServer.authorizationEndpoint %></code></li>
-			  <li><b>token_endpoint:</b> <code><%- authServer.tokenEndpoint %></code></li>
+			  <li><b>Authorizatoin Endopoint：</b> <code><%- authServer.authorizationEndpoint %></code></li>
+			  <li><b>Token Endpoint：</b> <code><%- authServer.tokenEndpoint %></code></li>
+			  <li><b>Introspection Endpoint：</b> <code><%- authServer.introspectionEndpoint %></code></li>
+        <!-- TODO:他のエンドポイント情報を表示する -->
 		   </ul>
       </div>
 

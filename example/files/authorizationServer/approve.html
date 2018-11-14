@@ -5,7 +5,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
-    <title>OAuth in Action: OAuth Authorization Server</title>
+    <title>サンプルプログラム：認可サーバ</title>
 
     <!-- Bootstrap -->
 	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
@@ -33,7 +33,7 @@
     <nav class="navbar navbar-inverse navbar-fixed-top">
       <div class="container">
         <div class="navbar-header">
-          <a class="navbar-brand" href="/">OAuth in Action: <span class="label label-danger">OAuth Authorization Server</label></a>
+          <a class="navbar-brand" href="/">サンプルプログラム： <span class="label label-danger">認可サーバ</label></a>
         </div>
       </div>
     </nav>
@@ -41,22 +41,23 @@
     <div class="container">
 
       <div class="jumbotron">
-		  <h2>Approve this client?</h2>
+		  <h2>このクライアントを認可しますか？</h2>
 		  <% if (client.client_name) { %>
-		  <p><b>Name:</b> <code><%- client.client_name %></code></p>
+		  <p><b>クライアントアプリケーションの名前：</b> <code><%- client.client_name %></code></p>
 		  <% } %>
-		  <p><b>ID:</b> <code><%- client.client_id %></code></p>
+		  <p><b>クライアントID：</b> <code><%- client.client_id %></code></p>
 		  <% if (client.client_uri) { %>
-		  <p><b>URI:</b> <code><%- client.client_uri %></code></p>
+		  <p><b>クライアントURI：</b> <code><%- client.client_uri %></code></p>
 		  <% } %>
 		  <% if (client.redirect_uris) { %>
-		  <p><b>Redirect To:</b> <code><%- client.redirect_uris[0] %></code></p>
+		  <p><b>リダイレクトURI：</b> <code><%- client.redirect_uris[0] %></code></p>
 		  <% } %>
 		  <% if (client.logo_uri) { %>
-		  <p><b>logo:</b> <img class="client-logo" src="<%- client.logo_uri %>" /></p>
+		  <p><b>クライアントロゴのURI：</b> <img class="client-logo" src="<%- client.logo_uri %>" /></p>
 		  <% } %>
 		  
 		   <form class="form" action="/approve" method="POST">
+<!-- TODO:ユーザを選択できるようにする（OpenID Connect） -->
 <!--
 			   <label>Select user:</label>
 			   <select name="user">
@@ -66,15 +67,15 @@
 -->
 			   <input type="hidden" name="reqid" value="<%- reqid %>">
 			   <% if (scope) { %>
-			   <p>The client is requesting access to the following:</p>
+			   <p>クライアントは、以下のスコープを要求しています：</p>
 			   <ul>
 			   <% _.each(scope, function(s) { %>
 			   	  <li><input type="checkbox" name="scope_<%- s %>" id="scope_<%- s %>" checked="checked"> <label for="scope_<%- s %>"><%- s %></label></li>
 			   <% }); %>
 		       </ul>
 			   <% } %>
-			   <input type="submit" class="btn btn-success" name="approve" value="Approve">
-			   <input type="submit" class="btn btn-danger" name="deny" value="Deny">
+			   <input type="submit" class="btn btn-success" name="approve" value="認可する">
+			   <input type="submit" class="btn btn-danger" name="deny" value="拒否する">
 		   </form>
       </div>
 

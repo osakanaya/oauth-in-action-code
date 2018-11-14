@@ -22,12 +22,15 @@ app.set('views', 'files/authorizationServer');
 app.set('json spaces', 4);
 
 // authorization server information
+// 認可サーバの情報
 var authServer = {
-	authorizationEndpoint: 'http://localhost:9001/authorize',
-	tokenEndpoint: 'http://localhost:9001/token'
+	authorizationEndpoint: 'http://localhost:9001/authorize', // AuthorizationEndpoint
+	tokenEndpoint: 'http://localhost:9001/token',             // Token Endpoint
+  introspectionEndpoint: 'http://localhost:9001/introspect' // Introspection Endpoint
+  // TODO:その他のエンドポイント情報を乗せ、トップページで表示できるようにする
 };
 
-// client information
+// 認可サーバに登録されているクライアントアプリケーションの情報
 var clients = [
 	{
 		"client_id": "oauth-client-1",
@@ -51,8 +54,11 @@ var clients = [
 	}
 ];
 
+// 共有鍵の情報
+// TODO:これ使われているの？
 var sharedTokenSecret = "shared token secret!";
 
+// 認可サーバの公開鍵と秘密鍵
 var rsaKey = {
   "alg": "RS256",
   "d": "ZXFizvaQ0RzWRbMExStaS_-yVnjtSQ9YslYQF1kkuIoTwFuiEQ2OywBfuyXhTvVQxIiJqPNnUyZR6kXAhyj__wS_Px1EH8zv7BHVt1N5TjJGlubt1dhAFCZQmgz0D-PfmATdf6KLL4HIijGrE8iYOPYIPF_FL8ddaxx5rsziRRnkRMX_fIHxuSQVCe401hSS3QBZOgwVdWEb1JuODT7KUk7xPpMTw5RYCeUoCYTRQ_KO8_NQMURi3GLvbgQGQgk7fmDcug3MwutmWbpe58GoSCkmExUS0U-KEkHtFiC8L6fN2jXh1whPeRCa9eoIK8nsIY05gnLKxXTn5-aPQzSy6Q",
@@ -62,13 +68,16 @@ var rsaKey = {
   "kid": "authserver"
 };
 
+// 保護リソースの情報
+// Introspection Endpointに問い合わせる保護リソースを認証するために使用する
 var protectedResources = [
 	{
-		"resource_id": "protected-resource-1",
-		"resource_secret": "protected-resource-secret-1"
+		"resource_id": "protected-resource-1",            // リソースID
+		"resource_secret": "protected-resource-secret-1"  // リソースシークレット
 	}
 ];
 
+// ユーザ情報（OpenID Connectで認証されるユーザの情報となる）
 var userInfo = {
 
 	"alice": {
@@ -98,45 +107,55 @@ var userInfo = {
  	}	
 };
 
+// 認可コード
 var codes = {};
 
+// 認可コード発行時のリクエスト情報
 var requests = {};
 
+// クライアントIDをキーに、登録されているクライアントアプリケーションを得る
 var getClient = function(clientId) {
 	return __.find(clients, function(client) { return client.client_id == clientId; });
 };
 
+// リソースIDをキーに、登録されている保護リソースを得る
 var getProtectedResource = function(resourceId) {
 	return __.find(protectedResources, function(resource) { return resource.resource_id == resourceId; });
 };
 
 
+// usernameからユーザ情報を得る
 var getUser = function(username) {
 	return userInfo[username];
 };
 
+// トップページを表示する
 app.get('/', function(req, res) {
 	res.render('index', {clients: clients, authServer: authServer});
 });
 
+// 認可に関する同意画面を表示する
 app.get("/authorize", function(req, res){
 	
 	var client = getClient(req.query.client_id);
 	
 	if (!client) {
+    // 登録されているクライアントがなければエラー
 		console.log('Unknown client %s', req.query.client_id);
-		res.render('error', {error: 'Unknown client'});
+		res.render('error', {error: '未知のクライアント'});
 		return;
 	} else if (!__.contains(client.redirect_uris, req.query.redirect_uri)) {
-		console.log('Mismatched redirect URI, expected %s got %s', client.redirect_uris, req.query.redirect_uri);
-		res.render('error', {error: 'Invalid redirect URI'});
+		console.log('リダイレクトURIがマッチしません（期待されるURI：%s, 指定されたURI：%s', client.redirect_uris, req.query.redirect_uri);
+		res.render('error', {error: '不正なリダイレクトURI'});
 		return;
 	} else {
-		
+		// クライアントアプリケーションがリクエストしたスコープ
 		var rscope = req.query.scope ? req.query.scope.split(' ') : undefined;
+    // 登録されたクライアントに設定されたスコープ
 		var cscope = client.scope ? client.scope.split(' ') : undefined;
+
+    // 登録されていないスコープをリクエストした場合、エラー
 		if (__.difference(rscope, cscope).length > 0) {
-			// client asked for a scope it couldn't have
 			var urlParsed = buildUrl(req.query.redirect_uri, {
 				error: 'invalid_scope'
 			});
@@ -144,51 +163,66 @@ app.get("/authorize", function(req, res){
 			return;
 		}
 		
+    // リクエストIDを生成する
 		var reqid = randomstring.generate(8);
 		
+    // 生成したリクエストIDをキーに、認可コードの発行リクエストを保存しておく
 		requests[reqid] = req.query;
 		
+    // 同意画面を表示する
 		res.render('approve', {client: client, reqid: reqid, scope: rscope});
 		return;
 	}
 
 });
 
+// Authorization Endpoint：同意画面での認可・拒否を処理する
 app.post('/approve', function(req, res) {
 
+  // 同意画面のHIDDENパラメータから受け取ったリクエストID
 	var reqid = req.body.reqid;
+  // 認可コードの発行リクエスト
 	var query = requests[reqid];
+  // 発行リクエストは再利用させないので、削除する
 	delete requests[reqid];
 
 	if (!query) {
-		// there was no matching saved request, this is an error
-		res.render('error', {error: 'No matching authorization request'});
+    // 認可コードの発行リクエストがない場合は、エラー
+		res.render('error', {error: 'マッチする認可リクエストがありません'});
 		return;
 	}
-	
+
 	if (req.body.approve) {
+    // リソースオーナーがクライアントアプリケーションを認可した場合
 		if (query.response_type == 'code') {
-			// user approved access
+      // Authorization Code Grantの場合
+
+      // 認可コードを生成する
 			var code = randomstring.generate(8);
 			
+      // 同意画面で選択したユーザ＝認可サーバで認証したユーザを取得する
+      // TODO:同意画面で選択したユーザを取得できるようにする
 			var user = req.body.user;
-		/*
+      
+      // リソースオーナーが同意画面で指定したスコープ
 			var scope = getScopesFromForm(req.body);
 
+      // クライアントアプリケーションとして登録されたスコープ
 			var client = getClient(query.client_id);
 			var cscope = client.scope ? client.scope.split(' ') : undefined;
+      // リソースオーナーが指定したスコープ＞登録されたスコープの場合、エラー
 			if (__.difference(scope, cscope).length > 0) {
-				// client asked for a scope it couldn't have
 				var urlParsed = buildUrl(query.redirect_uri, {
 					error: 'invalid_scope'
 				});
 				res.redirect(urlParsed);
 				return;
 			}
-			*/
-			// save the code and request for later
-			codes[code] = { request: query, scope: [], user: user, clientId: query.clientId };
-		
+
+      // 後続のトークン発行リクエストに備えて、認可コードをキーとして、認可コード発行リクエスト、スコープ、認証済みユーザ、クライアントIDを保存しておく
+			codes[code] = { request: query, scope: scope, user: user, clientId: query.clientId };
+
+      // クライアントアプリケーションにリダイレクトする
 			var urlParsed = buildUrl(query.redirect_uri, {
 				code: code,
 				state: query.state
@@ -239,10 +273,12 @@ app.post('/approve', function(req, res) {
 			return;
 		}
 	} else {
-		// user denied access
+    // リソースオーナーがクライアントアプリケーションを認可しなかった場合
 		var urlParsed = buildUrl(query.redirect_uri, {
-			error: 'access_denied'
+			error: 'アクセスが拒否されました'
 		});
+    
+    // リダイレクトURIへリダイレクトする
 		res.redirect(urlParsed);
 		return;
 	}
@@ -322,8 +358,10 @@ var generateTokens = function (req, res, clientId, user, scope, nonce, generateR
 	return token_response;
 };
 
+// Token Endpoint：アクセストークンを発行する
 app.post("/token", function(req, res){
-	
+
+  // AuthorizationヘッダにあるクライアントIDとクライアントシークレットを取得する
 	var auth = req.headers['authorization'];
 	if (auth) {
 		// check the auth header
@@ -331,12 +369,11 @@ app.post("/token", function(req, res){
 		var clientId = querystring.unescape(clientCredentials[0]);
 		var clientSecret = querystring.unescape(clientCredentials[1]);
 	}
-	
-	// otherwise, check the post body
+
 	if (req.body.client_id) {
 		if (clientId) {
-			// if we've already seen the client's credentials in the authorization header, this is an error
-			console.log('Client attempted to authenticate with multiple methods');
+      // Authorizationヘッダとフォームパラメータの両方にクライアントIDがある場合は、エラーとする
+			console.log('クライアントが複数の方法で認証しようとしています');
 			res.status(401).json({error: 'invalid_client'});
 			return;
 		}
@@ -344,53 +381,68 @@ app.post("/token", function(req, res){
 		var clientId = req.body.client_id;
 		var clientSecret = req.body.client_secret;
 	}
-	
+
 	var client = getClient(clientId);
 	if (!client) {
-		console.log('Unknown client %s', clientId);
+    // クライアントアプリケーションが登録されていない場合は、エラー
+		console.log('未知のクライアントアプリケーション %s', clientId);
 		res.status(401).json({error: 'invalid_client'});
 		return;
 	}
 	
 	if (client.client_secret != clientSecret) {
-		console.log('Mismatched client secret, expected %s got %s', client.client_secret, clientSecret);
+    // クライアントシークレットが一致していない場合は、エラー
+		console.log('クライアントシークレットが一致しません（期待される値： %s, 実際の値： %s）', client.client_secret, clientSecret);
 		res.status(401).json({error: 'invalid_client'});
 		return;
 	}
 	
 	if (req.body.grant_type == 'authorization_code') {
-		
+		/*
+      Authorization Code Grantの場合
+    */
+    
+    // 保存しておいた認可コード発行リクエストを取得する
 		var code = codes[req.body.code];
 		
 		if (code) {
-			delete codes[req.body.code]; // burn our code, it's been used
+      // 認可コード発行リクエストがあった場合
+      
+      // 認可コードは1回限りのものなので、発行リクエストを削除する
+			delete codes[req.body.code];
 			if (code.request.client_id == clientId) {
+        // 認可コード発行リクエストと認証情報のクライアントIDが一致する場合
 
+        // アクセストークンを生成し、DBに登録する
+        // TODO：リフレッシュトークンも生成する
 				var access_token = randomstring.generate();
 
 				nosql.insert({ access_token: access_token, client_id: clientId, scope: code.scope });
 
-				console.log('Issuing access token %s', access_token);
-				console.log('with scope %s', access_token, scope);
+				console.log('アクセストークンを発行しました： %s', access_token);
+				console.log('アクセストークンのスコープ： %s', code.scope);
 
 				var cscope = null;
 				if (code.scope) {
 					cscope = code.scope.join(' ');
 				}
 
+        // レスポンスを返却する
 				var token_response = { access_token: access_token, token_type: 'Bearer', scope: cscope };
 
 				res.status(200).json(token_response);
-				console.log('Issued tokens for code %s', req.body.code);
+				console.log('認可コード： %sに対してアクセストークンを発行しました', req.body.code);
 				
 				return;
 			} else {
-				console.log('Client mismatch, expected %s got %s', code.request.client_id, clientId);
+        // 認可コード発行リクエストと認証情報のクライアントIDが一致しない場合、エラー
+				console.log('クライアントアプリケーションが一致しません（期待されるクライアントID： %s, 実際のクライアントID： %s）', code.request.client_id, clientId);
 				res.status(400).json({error: 'invalid_grant'});
 				return;
 			}
 		} else {
-			console.log('Unknown code, %s', req.body.code);
+      // 認可コード発行リクエストがない場合
+			console.log('未知の認可コード： %s', req.body.code);
 			res.status(400).json({error: 'invalid_grant'});
 			return;
 		}
@@ -512,34 +564,44 @@ app.post('/revoke', function(req, res) {
 	
 });
 
+// Introspection Endpointの実装
 app.post('/introspect', function(req, res) {
+  // Authorizationヘッダから保護リソースのリソースIDとリソースシークレットを取得する
 	var auth = req.headers['authorization'];
 	var resourceCredentials = new Buffer(auth.slice('basic '.length), 'base64').toString().split(':');
 	var resourceId = querystring.unescape(resourceCredentials[0]);
 	var resourceSecret = querystring.unescape(resourceCredentials[1]);
 
+  // 問い合わせてきた保護リソースが認可サーバに登録されているかをチェックする
 	var resource = getProtectedResource(resourceId);
 	if (!resource) {
-		console.log('Unknown resource %s', resourceId);
+		console.log('未知の保護リソース： %s', resourceId);
 		res.status(401).end();
 		return;
 	}
 	
+  // リソースシークレットが登録された情報とマッチするかを確認する
 	if (resource.resource_secret != resourceSecret) {
-		console.log('Mismatched secret, expected %s got %s', resource.resource_secret, resourceSecret);
+		console.log('リソースシークレットが一致しません（期待される値： %s, 実際の値： %s', resource.resource_secret, resourceSecret);
 		res.status(401).end();
 		return;
 	}
 	
+  // 問い合わせてきたアクセストークンが登録されているかをチェックする
+  // TODO：ただ単に存在確認をするだけでなく、有効期限切れでないことをチェックする（発行時刻などの情報も登録する認可サーバで必要がある）
 	var inToken = req.body.token;
-	console.log('Introspecting token %s', inToken);
+	console.log('問い合わせ対応のアクセストークン： %s', inToken);
+
+  // DBを検索する
 	nosql.one(function(token) {
 		if (token.access_token == inToken) {
 			return token;	
 		}
 	}, function(err, token) {
 		if (token) {
-			console.log("We found a matching token: %s", inToken);
+      // 登録されたトークンがあれば、アクティブであると回答する
+      // TODO:トークンを発行したユーザを取得できるようんじする
+			console.log("一致するトークンがありました： %s", inToken);
 			
 			var introspectionResponse = {};
 			introspectionResponse.active = true;
@@ -551,7 +613,8 @@ app.post('/introspect', function(req, res) {
 			res.status(200).json(introspectionResponse);
 			return;
 		} else {
-			console.log('No matching token was found.');
+      // 登録されたトークンがなければ、アクティブでないと回答する
+			console.log('一致するトークンがありませんでした。');
 
 			var introspectionResponse = {};
 			introspectionResponse.active = false;
