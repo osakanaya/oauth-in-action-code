@@ -24,9 +24,10 @@ app.set('json spaces', 4);
 // authorization server information
 // 認可サーバの情報
 var authServer = {
-	authorizationEndpoint: 'http://localhost:9001/authorize', // AuthorizationEndpoint
-	tokenEndpoint: 'http://localhost:9001/token',             // Token Endpoint
-  introspectionEndpoint: 'http://localhost:9001/introspect' // Introspection Endpoint
+	authorizationEndpoint: 'http://localhost:9001/authorize',   // AuthorizationEndpoint
+	tokenEndpoint: 'http://localhost:9001/token',               // Token Endpoint
+  introspectionEndpoint: 'http://localhost:9001/introspect',  // Introspection Endpoint
+	registrationEndpoint: 'http://localhost:9001/register',     // Registration Endpoint
   // TODO:その他のエンドポイント情報を乗せ、トップページで表示できるようにする
 };
 
@@ -626,58 +627,81 @@ app.post('/introspect', function(req, res) {
 	
 });
 
+// 登録対象のクライアントアプリケーション情報をチェックする
+// 登録対象のクライアントアプリケーションは、Authorization Code Grantによる認可を受けるものを前提とする
 var checkClientMetadata = function (req, res) {
 	var reg = {};
 
+  // クライアントアプリケーションの認証方法が指定されていない場合、Authorizationヘッダによる認証が必要とみなす
 	if (!req.body.token_endpoint_auth_method) {
 		reg.token_endpoint_auth_method = 'secret_basic';	
 	} else {
 		reg.token_endpoint_auth_method = req.body.token_endpoint_auth_method;
 	}
 	
+  // クライアントアプリケーションの認証方法が不正な場合、エラー
+  // secret_basic＝AuthorizationヘッダでクライアントIDとクライアントシークレットを指定
+  // secret_post＝フォームパラメータでクライアントIDとクライアントシークレットを指定
+  // none＝クライアントシークレットによる認証を必要としない
 	if (!__.contains(['secret_basic', 'secret_post', 'none'], reg.token_endpoint_auth_method)) {
 		res.status(400).json({error: 'invalid_client_metadata'});
 		return;
 	}
 	
 	if (!req.body.grant_types) {
+    // grant_typeが指定されていない場合
 		if (!req.body.response_types) {
+      // response_typeも指定されていない場合
+      
+      // Authorization Code Grantとする
 			reg.grant_types = ['authorization_code'];
 			reg.response_types = ['code'];
 		} else {
+      // response_typeのみが指定されている場合
 			reg.response_types = req.body.response_types;
 			if (__.contains(req.body.response_types, 'code')) {
+        // response_type＝codeの場合、Authorization Code Grantとする
 				reg.grant_types = ['authorization_code'];
 			} else {
 				reg.grant_types = [];
 			}
 		}
 	} else {
+    // grant_typeが指定されている場合
 		if (!req.body.response_types) {
+      // response_typeが指定されていない場合
+
 			reg.grant_types = req.body.grant_types;
 			if (__.contains(req.body.grant_types, 'authorization_code')) {
+        // grant_type＝authorization_codeの場合、response_type=codeとする（Authorization Code Grant）
 				reg.response_types =['code'];
 			} else {
 				reg.response_types = [];
 			}
 		} else {
+      // response_typeが指定されている場合
+
 			reg.grant_types = req.body.grant_types;
-			reg.reponse_types = req.body.response_types;
+			reg.response_types = req.body.response_types;
 			if (__.contains(req.body.grant_types, 'authorization_code') && !__.contains(req.body.response_types, 'code')) {
+        // grant_type＝authorization_codeで、response_type≠codeでない場合、response_typeにcodeを追加する
 				reg.response_types.push('code');
 			}
 			if (!__.contains(req.body.grant_types, 'authorization_code') && __.contains(req.body.response_types, 'code')) {
+        // grant_type≠authorization_codeで、response_type＝codeの場合、grant_typeにauthorization_codeを追加する
 				reg.grant_types.push('authorization_code');
 			}
 		}
 	}
 
+  // grant_typeにauthorization_code/refresh_token以外のものが含まれる場合、または、repsonse_typeにcode以外のものが含まれる場合、エラー
 	if (!__.isEmpty(__.without(reg.grant_types, 'authorization_code', 'refresh_token')) ||
 		!__.isEmpty(__.without(reg.response_types, 'code'))) {
 		res.status(400).json({error: 'invalid_client_metadata'});
 		return;
 	}
 
+  // リダイレクトURIがない場合、エラー
 	if (!req.body.redirect_uris || !__.isArray(req.body.redirect_uris) || __.isEmpty(req.body.redirect_uris)) {
 		res.status(400).json({error: 'invalid_redirect_uri'});
 		return;
@@ -685,18 +709,22 @@ var checkClientMetadata = function (req, res) {
 		reg.redirect_uris = req.body.redirect_uris;
 	}
 	
+  // クライアント名
 	if (typeof(req.body.client_name) == 'string') {
 		reg.client_name = req.body.client_name;
 	}
 	
+  // クライアントのURL
 	if (typeof(req.body.client_uri) == 'string') {
 		reg.client_uri = req.body.client_uri;
 	}
 	
+  // クライアントのロゴのURL
 	if (typeof(req.body.logo_uri) == 'string') {
 		reg.logo_uri = req.body.logo_uri;
 	}
 	
+  // クライアントのスコープ
 	if (typeof(req.body.scope) == 'string') {
 		reg.scope = req.body.scope;
 	}
@@ -704,24 +732,36 @@ var checkClientMetadata = function (req, res) {
 	return reg;
 };
 
+//  Registration Endpointの実装
 app.post('/register', function (req, res){
 
+  // 受信したクライアントアプリケーション情報をチェックする
 	var reg = checkClientMetadata(req, res);
 	if (!reg) {
 		return;
 	}
 
+  // クライアントIDをランダムな文字列として生成する
 	reg.client_id = randomstring.generate();
+
+  // アクセストークンの発行時のクライアントアプリケーションの認証で、クライアントシークレットを必要とするクライアントアプリケーション場合、クライアントシークレットを生成する
 	if (__.contains(['client_secret_basic', 'client_secret_post']), reg.token_endpoint_auth_method) {
 		reg.client_secret = randomstring.generate();
 	}
 
+  // 登録日時
 	reg.client_id_created_at = Math.floor(Date.now() / 1000);
+  
+  // クライアントアプリケーションの有効期限（0＝無期限）
 	reg.client_secret_expires_at = 0;
 
+  // 登録済みクライアントアプリケーションの管理（更新、削除）に必要なアクセストークン
 	reg.registration_access_token = randomstring.generate();
+
+  // 登録済みのクライアントアプリケーションの管理（更新、削除）を行うAPIのURI
 	reg.registration_client_uri = 'http://localhost:9001/register/' + reg.client_id;
 
+  // 認可サーバにクライアントアプリケーション情報を登録する
 	clients.push(reg);
 	
 	res.status(201).json(reg);

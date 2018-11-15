@@ -40,12 +40,13 @@ var rsaKey = {
 };
 
 // クライアント情報
-// TODO:この情報を消して、Dyanmic Registrationを作動させる
 var client = {
+/*
 	"client_id": "oauth-client-1",                        // クライアントID
 	"client_secret": "oauth-client-secret-1",             // クライアントシークレット
 	"redirect_uris": ["http://localhost:9000/callback"],  // リダイレクトURI
 	"scope": "foo bar"                                    // 認可サーバに登録したクライアントが要求するスコープ
+*/
 };
 
 // 保護リソースが効果するAPIのURL
@@ -101,18 +102,22 @@ app.get('/authorize', function(req, res){
 	res.redirect(authorizeUrl);
 });
 
+// Dynamic Client Registration：クライアントを動的に登録する
 var registerClient = function() {
 	
+  // クライアントアプリケーションの登録情報
 	var template = {
-		client_name: 'OAuth in Action Dynamic Test Client',
-		client_uri: 'http://localhost:9000/',
-		redirect_uris: ['http://localhost:9000/callback'],
-		grant_types: ['authorization_code'],
+		client_name: 'OAuth in Action Dynamic Test Client',   // クライアントの名前
+		client_uri: 'http://localhost:9000/',                 // クライアントのURL
+    logo_uri: 'http://localhost:9000/logo',               // クライアントのロゴ
+		redirect_uris: ['http://localhost:9000/callback'],    // リダイレクトURI
+		grant_types: ['authorization_code', 'refresh_token'], // サポートする認可フローの種類
 		response_types: ['code'],
-		token_endpoint_auth_method: 'secret_basic',
-		scope: 'openid profile email address phone'
+		token_endpoint_auth_method: 'secret_basic',           // Token Endpointへクライアントアプリケーションが認証する方法（Authorizationヘッダによる認証）
+		scope: 'openid profile email address phone'           // スコープ
 	};
 
+  // 登録リクエストを送る
 	var headers = {
 		'Content-Type': 'application/json',
 		'Accept': 'application/json'
@@ -127,7 +132,7 @@ var registerClient = function() {
 	
 	if (regRes.statusCode == 201) {
 		var body = JSON.parse(regRes.getBody());
-		console.log("Got registered client", body);
+		console.log("クライアントアプリケーションが認可サーバに登録されました：", body);
 		if (body.client_id) {
 			client = body;
 		}

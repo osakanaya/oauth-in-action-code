@@ -40,10 +40,20 @@
 		  <h2>クライアント情報：</h2>
 		  <% _.each(clients, function(client) { %>
 		  <ul>
+			  <li><b>クライアント名：</b> <code><%- client.client_name %></code></li>
+			  <li><b>クライアントURL：</b> <code><%- client.client_uri %></code></li>
+			  <li><b>クライアントのロゴ：</b> <code><%- client.logo_uri %></code></li>
 			  <li><b>クライアントID：</b> <code><%- client.client_id %></code></li>
 			  <li><b>クライアントシークレット：</b> <code><%- client.client_secret %></code></li>
+			  <li><b>Authorization EndpointでのGrant Type：</b> <code><%- client.grant_types %></code></li>
+			  <li><b>Token EndpointでのResponse Type：</b> <code><%- client.response_types %></code></li>
+			  <li><b>Token Endpointでのクライアントアプリケーションの認証情報：</b> <code><%- client.token_endpoint_auth_method %></code></li>
 			  <li><b>スコープ：</b> <code><%- client.scope %></code></li>
-			  <li><b>リダイレクトURI：</b> <code><%- client.redirect_uri %></code></li>
+			  <li><b>リダイレクトURI：</b> <code><%- client.redirect_uris %></code></li>
+			  <li><b>クライアントの登録日時：</b> <code><%- new Date(client.client_id_created_at * 1000) %></code></li>
+			  <li><b>クライアントシークレットの有効期限：</b> <code><%- new Date(client.client_secret_expires_at * 1000) %></code></li>
+			  <li><b>Registration Endpointのアクセストークン：</b> <code><%- client.registration_access_token %></code></li>
+			  <li><b>クライアント管理用のエンドポイント：</b> <code><%- client.registration_client_uri %></code></li>
 		   </ul>
 		   <% }); %>
 		   <h2>サーバ情報：</h2>
@@ -51,6 +61,7 @@
 			  <li><b>Authorizatoin Endopoint：</b> <code><%- authServer.authorizationEndpoint %></code></li>
 			  <li><b>Token Endpoint：</b> <code><%- authServer.tokenEndpoint %></code></li>
 			  <li><b>Introspection Endpoint：</b> <code><%- authServer.introspectionEndpoint %></code></li>
+			  <li><b>Registration Endpoint：</b> <code><%- authServer.registrationEndpoint %></code></li>
         <!-- TODO:他のエンドポイント情報を表示する -->
 		   </ul>
       </div>
@@ -62,6 +73,6 @@
     <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
     <!-- Include all compiled plugins (below), or include individual files as needed -->
-	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
   </body>
 </html>
