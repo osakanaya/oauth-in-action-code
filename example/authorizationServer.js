@@ -202,7 +202,6 @@ app.post('/approve', function(req, res) {
 			var code = randomstring.generate(8);
 			
       // 同意画面で選択したユーザ＝認可サーバで認証したユーザを取得する
-      // TODO:同意画面で選択したユーザを取得できるようにする
 			var user = req.body.user;
       
       // リソースオーナーが同意画面で指定したスコープ
@@ -286,69 +285,86 @@ app.post('/approve', function(req, res) {
 	
 });
 
-var generateTokens = function (req, res, clientId, user, scope, nonce, generateRefreshToken) {
-	var access_token = randomstring.generate();
+// アクセストークン、リフレッシュトークン、IDトークンを生成する
+var generateTokens = function (req, res, clientId, user, scope, nonce) {
+  
+  // リフレッシュトークンを生成する
+  var refresh_token = randomstring.generate();
+  
+  /*
+    アクセストークンをJWT形式で生成する
+  */
+  
+  // ヘッダ
+	var at_header = { 'typ': 'JWT', 'alg': 'RS256', 'kid': rsaKey.kid};
 
-	var refresh_token = null;
+  // ペイロード
+	var at_payload = {};
+	at_payload.iss = 'http://localhost:9001/';                 // アクセストークンの発行元（認可サーバ）
+	at_payload.sub = user;                                     // アクセストークンのサブジェクト（リソースオーナー）
+	at_payload.aud = 'http://localhost:9002/';                 // アクセストークンの発行先（保護リソース）
+	at_payload.iat = Math.floor(Date.now() / 1000);            // アクセストークンの発行日時
+	at_payload.exp = Math.floor(Date.now() / 1000) + (5 * 60); // アクセストークンの有効期限
+	at_payload.jti = randomstring.generate();                  // アクセストークンの識別子
+	console.log('アクセストークンのペイロード：', at_payload);
 
-	if (generateRefreshToken) {
-		refresh_token = randomstring.generate();	
-	}	
+  // ヘッダ、ペイロードを文字列にする
+	var at_stringHeader = JSON.stringify(at_header);
+	var at_stringPayload = JSON.stringify(at_payload);
 
-	/*
-	var header = { 'typ': 'JWT', 'alg': 'RS256', 'kid': rsaKey.kid};
-
-	var payload = {};
-	payload.iss = 'http://localhost:9001/';
-	payload.sub = user;
-	payload.aud = 'http://localhost:9002/';
-	payload.iat = Math.floor(Date.now() / 1000);
-	payload.exp = Math.floor(Date.now() / 1000) + (5 * 60);
-	payload.jti = randomstring.generate();
-	console.log(payload);
-
-	var stringHeader = JSON.stringify(header);
-	var stringPayload = JSON.stringify(payload);
-	//var encodedHeader = base64url.encode(JSON.stringify(header));
-	//var encodedPayload = base64url.encode(JSON.stringify(payload));
-
-	//var access_token = encodedHeader + '.' + encodedPayload + '.';
-	//var access_token = jose.jws.JWS.sign('HS256', stringHeader, stringPayload, new Buffer(sharedTokenSecret).toString('hex'));
+  // 署名されたアクセストークンを作成する
+  // 認可サーバの秘密鍵
 	var privateKey = jose.KEYUTIL.getKey(rsaKey);
-	var access_token = jose.jws.JWS.sign('RS256', stringHeader, stringPayload, privateKey);
-	*/
+  // アクセストークンに署名する
+	var access_token = jose.jws.JWS.sign('RS256', at_stringHeader, at_stringPayload, privateKey);
 
-	var header = { 'typ': 'JWT', 'alg': 'RS256', 'kid': rsaKey.kid};
-	
-	var payload = {};
-	payload.iss = 'http://localhost:9001/';
-	payload.sub = user.sub;
-	payload.aud = clientId;
-	payload.iat = Math.floor(Date.now() / 1000);
-	payload.exp = Math.floor(Date.now() / 1000) + (5 * 60);	
+  /*
+    IDトークンを生成する
+  */
 
-	if (nonce) {
-		payload.nonce = nonce;
-	}
+  var id_token;
+  
+  // スコープに「openid」が含まれていれば、IDトークンを生成する
+  if (__.contains(scope, 'openid') && user) {
+    // ヘッダ
+    var it_header = { 'typ': 'JWT', 'alg': 'RS256', 'kid': rsaKey.kid};
+    
+    // ペイロード
+    var it_payload = {};
+    it_payload.iss = 'http://localhost:9001/';                    // IDトークンの発行元（IdP）
+    it_payload.sub = user.sub;                                    // IDトークンのサブジェクト（ユーザ）
+    it_payload.aud = clientId;                                    // IDトークンの発行先（クライアントID）
+    it_payload.iat = Math.floor(Date.now() / 1000);               // IDトークンの発行日時
+    it_payload.exp = Math.floor(Date.now() / 1000) + (5 * 60);    // IDトークンの有効期限
 
-	var stringHeader = JSON.stringify(header);
-	var stringPayload = JSON.stringify(payload);
-	var privateKey = jose.KEYUTIL.getKey(rsaKey);
-	var id_token = jose.jws.JWS.sign('RS256', stringHeader, stringPayload, privateKey);
+    // nonceが指定されていればそれを含める
+    if (nonce) {
+      it_payload.nonce = nonce;
+    }
 
-	nosql.insert({ access_token: access_token, client_id: clientId, scope: scope, user: user });
+    // ヘッダ、ペイロードを文字列にする
+    var it_stringHeader = JSON.stringify(it_header);
+    var it_stringPayload = JSON.stringify(it_payload);
+    
+    // 署名されたIDトークンを作成する
+    // IDトークンに署名する
+    id_token = jose.jws.JWS.sign('RS256', it_stringHeader, it_stringPayload, privateKey);
+  }
+  
+  // アクセストークンを登録する
+	nosql.insert({ access_token: access_token, client_id: clientId, scope: scope, user: user, iss: at_payload.iss, iat: at_payload.iat, exp: at_payload.exp });
+	console.log('アクセストークンを発行しました： %s', access_token);
+	console.log('アクセストークンのスコープ： %s', scope);
 
-	if (refresh_token) {
-		nosql.insert({ refresh_token: refresh_token, client_id: clientId, scope: scope, user: user });
-	}
-	
-	console.log('Issuing access token %s', access_token);
-	if (refresh_token) {
-		console.log('and refresh token %s', refresh_token);
-	}
-	console.log('with scope %s', access_token, scope);
-	console.log('Iussing ID token %s', id_token);
+  // リフレッシュトークンを登録する
+  nosql.insert({ refresh_token: refresh_token, client_id: clientId, scope: scope, user: user });
+	console.log('リフレッシュトークンを発行しました： %s', refresh_token);
+  
+  if (id_token) {
+    console.log('IDトークンを発行しました： %s', id_token);
+  }
 
+  // レスポンスを返す
 	var cscope = null;
 	if (scope) {
 		cscope = scope.join(' ')
@@ -414,22 +430,8 @@ app.post("/token", function(req, res){
 			if (code.request.client_id == clientId) {
         // 認可コード発行リクエストと認証情報のクライアントIDが一致する場合
 
-        // アクセストークンを生成し、DBに登録する
-        // TODO：リフレッシュトークンも生成する
-				var access_token = randomstring.generate();
-
-				nosql.insert({ access_token: access_token, client_id: clientId, scope: code.scope });
-
-				console.log('アクセストークンを発行しました： %s', access_token);
-				console.log('アクセストークンのスコープ： %s', code.scope);
-
-				var cscope = null;
-				if (code.scope) {
-					cscope = code.scope.join(' ');
-				}
-
-        // レスポンスを返却する
-				var token_response = { access_token: access_token, token_type: 'Bearer', scope: cscope };
+        // アクセストークン、リフレッシュトークン、IDトークンを発行する
+				var token_response = generateTokens(req, res, clientId, code.user, code.scope, code.request.nonce);
 
 				res.status(200).json(token_response);
 				console.log('認可コード： %sに対してアクセストークンを発行しました', req.body.code);
@@ -589,27 +591,28 @@ app.post('/introspect', function(req, res) {
 	}
 	
   // 問い合わせてきたアクセストークンが登録されているかをチェックする
-  // TODO：ただ単に存在確認をするだけでなく、有効期限切れでないことをチェックする（発行時刻などの情報も登録する認可サーバで必要がある）
 	var inToken = req.body.token;
 	console.log('問い合わせ対応のアクセストークン： %s', inToken);
 
   // DBを検索する
 	nosql.one(function(token) {
-		if (token.access_token == inToken) {
+    var now = Math.floor(Date.now() / 1000);
+		if (token.access_token == inToken && now >= token.iat && token.exp >= now) {
 			return token;	
 		}
 	}, function(err, token) {
 		if (token) {
       // 登録されたトークンがあれば、アクティブであると回答する
-      // TODO:トークンを発行したユーザを取得できるようんじする
 			console.log("一致するトークンがありました： %s", inToken);
 			
 			var introspectionResponse = {};
 			introspectionResponse.active = true;
-			introspectionResponse.iss = 'http://localhost:9001/';
+			introspectionResponse.iss = token.iss;
 			introspectionResponse.sub = token.user;
 			introspectionResponse.scope = token.scope.join(' ');
 			introspectionResponse.client_id = token.client_id;
+      introspectionResponse.iat = token.iat;
+      introspectionResponse.exp = token.exp;
 						
 			res.status(200).json(introspectionResponse);
 			return;

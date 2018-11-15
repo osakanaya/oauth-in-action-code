@@ -71,65 +71,64 @@ var getAccessToken = function(req, res, next) {
 	}
 	
 	console.log('クライアントアプリケーションから受信したアクセストークン： %s', inToken);
-	/*
-	nosql.one(function(token) {
-		if (token.access_token == inToken) {
-			return token;	
-		}
-	}, function(err, token) {
-		if (token) {
-			console.log("We found a matching token: %s", inToken);
-		} else {
-			console.log('No matching token was found.');
-		}
-		req.access_token = token;
-		next();
-		return;
-	});
-	*/
-  // TODO:アクセストークンがJWT形式の場合、その内容を検証する
-	/*
-	//var signatureValid = jose.jws.JWS.verify(inToken, new Buffer(sharedTokenSecret).toString('hex'), ['HS256']);
+
+  /*
+    JWT形式のアクセストークンの内容を検証する
+  */
+  
+  // 認可サーバの公開鍵
 	var pubKey = jose.KEYUTIL.getKey(rsaKey);
+  
+  // アクセストークンの署名を検証する
 	var signatureValid = jose.jws.JWS.verify(inToken, pubKey, ['RS256']);
 	if (signatureValid) {
-		console.log('Signature validated.');
+    console.log('署名が検証されました');
+
+    // アクセストークンのペイロードを抽出し、Base64URLエンコードする
 		var tokenParts = inToken.split('.');
 		var payload = JSON.parse(base64url.decode(tokenParts[1]));
-		console.log('Payload', payload);
+		console.log('アクセストークンのペイロード', payload);
+    
 		if (payload.iss == 'http://localhost:9001/') {
-			console.log('issuer OK');
+      // アクセストークンが期待される認可サーバから発行されたかをチェック
+			console.log('アクセストークンの発行元　＝　OK');
 			if ((Array.isArray(payload.aud) && _.contains(payload.aud, 'http://localhost:9002/')) || 
 				payload.aud == 'http://localhost:9002/') {
-				console.log('Audience OK');
+        // アクセストークンの発行先が自分であることをチェック
+				console.log('アクセストークンの発行先　＝　OK');
 				
+        // アクセストークンが有効期限切れでないことをチェック
 				var now = Math.floor(Date.now() / 1000);
 				
 				if (payload.iat <= now) {
-					console.log('issued-at OK');
+					console.log('アクセストークンの発行時刻≦現在時刻　＝　OK');
 					if (payload.exp >= now) {
-						console.log('expiration OK');
+						console.log('アクセストークンの有効期限≧現在時刻　＝　OK');
 						
-						console.log('Token valid!');
-		
-						req.access_token = payload;
-						
-					}
-				}
-			}
-			
-		}
-			
-
+						console.log('アクセストークンはOKです！');
+					} else {
+            next();
+            return;
+          }
+				} else {
+          next();
+          return;
+        }
+			} else {
+        next();
+        return;
+      }
+		} else {
+      next();
+      return;
+    }
 	}
-	next();
-	return;
-	*/
-	
+
   // Introspection Endpointにアクセストークンの情報を問い合わせる
 	var form_data = qs.stringify({
 		token: inToken
 	});
+  
 	var headers = {
 		'Content-Type': 'application/x-www-form-urlencoded',
     // Authorizationヘッダには、保護リソースのリソースIDとリソースシークレットを指定する
@@ -153,6 +152,7 @@ var getAccessToken = function(req, res, next) {
 			req.access_token = body;
 		}
 	}
+  
 	next();
 	return;
 	

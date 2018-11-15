@@ -40,6 +40,7 @@
 		  <p>アクセストークン： <span class="label label-danger"><%- access_token ? access_token : 'NONE' %></span></p>
 		  <p>スコープ： <span class="label label-danger"><%- scope ? scope : 'NONE' %></span></p>
 		  <p>リフレッシュトークン: <span class="label label-danger"><%- refresh_token ? refresh_token : 'NONE' %></span></p>
+		  <p>IDトークン: <span class="label label-danger"><%- id_token_raw ? id_token_raw : 'NONE' %></span></p>
 		  <a class="btn btn-default" href="/authorize">アクセストークンを取得する</a> 
 		  <a class="btn btn-default" href="/fetch_resource">保護リソースにアクセスする</a> 
       </div>

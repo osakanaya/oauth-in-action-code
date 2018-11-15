@@ -58,14 +58,18 @@ var favoritesApi = 'http://localhost:9002/favorites';
 // 認可コードの取得に使用するstateパラメータ
 var state = null;
 
-var access_token = null;    // アクセストークン
-var refresh_token = null;   // リフレッシュトークン
-var scope = null;           // 実際にリソースオーナーによって認可サーバから委譲されたスコープ
-var id_token = null;        // IDトークン
+// IDトークンの発行に使用するnonceパラメータ
+var nonce = null;
+
+var access_token = null;      // アクセストークン
+var refresh_token = null;     // リフレッシュトークン
+var scope = null;             // 実際にリソースオーナーによって認可サーバから委譲されたスコープ
+var id_token = null;          // IDトークン（ペイロード）
+var id_token_raw = null;      // IDトークン
 
 // トップページを表示する
 app.get('/', function (req, res) {
-	res.render('index', {access_token: access_token, refresh_token: refresh_token, scope: scope});
+	res.render('index', {access_token: access_token, refresh_token: refresh_token, scope: scope, id_token_raw: id_token_raw});
 });
 
 // 認可サーバにリダイレクトする
@@ -88,6 +92,9 @@ app.get('/authorize', function(req, res){
   
   // 認可コードの発行依頼に際し、stateパラメータを生成する
 	state = randomstring.generate();
+  
+  // IDトークンの発行に際し、nonceパラメータを生成する
+  nonce = randomstring.generate();
 	
   // Authorization Endpointにリダイレクトする
 	var authorizeUrl = buildUrl(authServer.authorizationEndpoint, {
@@ -95,7 +102,8 @@ app.get('/authorize', function(req, res){
 		scope: client.scope,
 		client_id: client.client_id,
 		redirect_uri: client.redirect_uris[0],
-		state: state
+		state: state,
+    nonce: nonce
 	});
 	
 	console.log("リダイレクト先：", authorizeUrl);
@@ -199,8 +207,8 @@ app.get("/callback", function(req, res){
 
 		if (body.id_token) {
       // IDトークンが発行された場合
-      // TODO:IDトークンの発行を試みる
 			console.log('IDトークンが発行されました： %s', body.id_token);
+      id_token_raw = body.id_token;
 			
       /*
         IDトークンが正当性を検証する
@@ -217,6 +225,17 @@ app.get("/callback", function(req, res){
 				var payload = JSON.parse(base64url.decode(tokenParts[1]));
 				console.log('IDトークンのペイロード：', payload);
 
+        // nonceがある場合、それを付き合わせる
+        if (payload.nonce) {
+          if (payload.nonce == nonce) {
+            console.log('nonceパラメータの値がマッチしました。（認可コード発行リクエスト時の値：%s, 認可サーバから受け取った値：%s）', nonce, payload.nonce);
+          } else {
+            console.log('nonceパラメータの値がマッチしません。（認可コード発行リクエスト時の値：%s, 認可サーバから受け取った値：%s）', nonce, payload.nonce);
+            res.render('error', {error: 'nonceパラメータの値がマッチしません'});
+            return;
+          }
+        }
+        
 				if (payload.iss == 'http://localhost:9001/') {
           // IDトークンが期待される認可サーバ（IdP）から発行されたかをチェック
 					console.log('IDトークンの発行元　＝　OK');
@@ -238,16 +257,31 @@ app.get("/callback", function(req, res){
 		
 								id_token = payload;
 						
-							}
-						}
-					}
-			
-				}
-			
-
-			}
-			
-			
+							} else {
+                console.log('IDトークンは有効期限切れです');
+                res.render('error', {error: 'IDトークンは有効期限切れです'});
+                return;
+              }
+						} else {
+              console.log('IDトークンは有効期限切れです');
+              res.render('error', {error: 'IDトークンは有効期限切れです'});
+              return;
+            }
+					} else {
+            console.log('IDトークンの発行先が正しくありません： %s', payload.aud);
+            res.render('error', {error: 'IDトークンの発行先が正しくありません：'});
+            return;
+          }
+				} else {
+          console.log('IDトークンの発行元が正しくありません： %s', payload.iss);
+          res.render('error', {error: 'IDトークンの発行元が正しくありません'});
+          return;
+        }
+			} else {
+        console.log('IDトークンの署名を検証できませんでした');
+        res.render('error', {error: 'IDトークンの署名を検証できませんでした'});
+        return;
+      }
 		}
 		
     // スコープを抽出する
@@ -255,9 +289,9 @@ app.get("/callback", function(req, res){
 		console.log('実際に認可されたスコープ： %s', scope);
 
     // トップページを表示する
-		res.render('index', {access_token: access_token, refresh_token: refresh_token, scope: scope});
+		res.render('index', {access_token: access_token, refresh_token: refresh_token, scope: scope, id_token_raw: id_token_raw});
 	} else {
-		res.render('error', {error: 'Unable to fetch access token, server response: ' + tokRes.statusCode})
+		res.render('error', {error: 'アクセストークンを取得できませんでした。認可サーバのレスポンス：: ' + tokRes.statusCode})
 	}
 });
 
