@@ -5,7 +5,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
-    <title>OAuth in Action: OAuth Client</title>
+    <title>サンプルプログラム：クライアントアプリケーション</title>
 
     <!-- Bootstrap -->
 	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
@@ -29,7 +29,7 @@
     <nav class="navbar navbar-inverse navbar-fixed-top">
       <div class="container">
         <div class="navbar-header">
-          <a class="navbar-brand" href="/">OAuth in Action: <span class="label label-primary">OAuth Client</label></a>
+          <a class="navbar-brand" href="/">サンプルプログラム： <span class="label label-primary">クライアントアプリケーション</label></a>
         </div>
       </div>
     </nav>
@@ -40,31 +40,31 @@
 		  
 		  <div class="col-md-4">
 			  <div class="well">
-				  <h3>Read the current value</h3>
-				  <% if (result == 'get') { %><p><span class="label label-success">Success</span></p><% } %>
-				  <% if (result == 'noget') { %><p><span class="label label-danger">Failure</span></p><% } %>
-				  <p><%- words ? 'Words: ' + words : ''%></p>
-				  <p><%- timestamp ? 'Timestamp: ' + timestamp : ''%></p>
-			  	  <a class="btn btn-info" href="/get_words">GET current value</a> 
+				  <h3>現在の単語リストを取得する</h3>
+				  <% if (result == 'get') { %><p><span class="label label-success">成功</span></p><% } %>
+				  <% if (result == 'noget') { %><p><span class="label label-danger">失敗</span></p><% } %>
+				  <p><%- words ? '登録された単語: ' + words : ''%></p>
+				  <p><%- timestamp ? 'タイムスタンプ: ' + timestamp : ''%></p>
+			  	  <a class="btn btn-info" href="/get_words">単語リストを取得（GET）</a> 
 			  </div>
 		  </div>
 		  <div class="col-md-4">
 			  <div class="well">
-				  <h3>Add a word to the list</h3>
-				  <% if (result == 'add') { %><p><span class="label label-success">Success</span></p><% } %>
-				  <% if (result == 'noadd') { %><p><span class="label label-danger">Failure</span></p><% } %>
+				  <h3>リストに単語を追加する</h3>
+				  <% if (result == 'add') { %><p><span class="label label-success">成功</span></p><% } %>
+				  <% if (result == 'noadd') { %><p><span class="label label-danger">失敗</span></p><% } %>
 				  <form class="form" action="/add_word" method="GET">
-					  <input type="text" name="word" placeholder="word">
-					  <input type="submit" class="btn btn-warning" href="/" value="POST a new word" >
+					  <input type="text" name="word" placeholder="単語を入力">
+					  <input type="submit" class="btn btn-warning" href="/" value="単語を追加（POST）" >
 				  </form>
 			  </div>
 		  </div>
 		  <div class="col-md-4">
 			  <div class="well">
-				  <h3>Remove the last word from the list</h3>
-				  <% if (result == 'rm') { %><p><span class="label label-success">Success</span></p><% } %>
-				  <% if (result == 'norm') { %><p><span class="label label-danger">Failure</span></p><% } %>
- 			  	  <a class="btn btn-danger" href="/delete_word">DELETE the last word</a> 
+				  <h3>リストから単語を削除する</h3>
+				  <% if (result == 'rm') { %><p><span class="label label-success">成功</span></p><% } %>
+				  <% if (result == 'norm') { %><p><span class="label label-danger">失敗</span></p><% } %>
+ 			  	  <a class="btn btn-danger" href="/delete_word">最後の単語を削除（DELETE）</a> 
 			  </div>
 		  </div>
 		  

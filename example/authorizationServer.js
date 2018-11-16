@@ -698,7 +698,8 @@ app.post('/introspect', function(req, res) {
 			var introspectionResponse = {};
 			introspectionResponse.active = true;
 			introspectionResponse.iss = token.iss;
-			introspectionResponse.sub = token.user;
+			introspectionResponse.sub = token.sub;
+      introspectionResponse.user = token.user;
 			introspectionResponse.scope = token.scope.join(' ');
 			introspectionResponse.client_id = token.client_id;
       introspectionResponse.iat = token.iat;

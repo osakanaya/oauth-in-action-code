@@ -5,7 +5,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
-    <title>OAuth in Action: OAuth Client</title>
+    <title>サンプルプログラム：クライアントアプリケーション</title>
 
     <!-- Bootstrap -->
 	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
@@ -29,7 +29,7 @@
     <nav class="navbar navbar-inverse navbar-fixed-top">
       <div class="container">
         <div class="navbar-header">
-          <a class="navbar-brand" href="/">OAuth in Action: <span class="label label-primary">OAuth Client</label></a>
+          <a class="navbar-brand" href="/">サンプルプログラム： <span class="label label-primary">クライアントアプリケーション</label></a>
         </div>
       </div>
     </nav>
@@ -40,28 +40,29 @@
 		  
 		  <h2>Favorites API</h2>
 		  
-		  <p>Resource owner's name: <%- data.user %>
+		  <p>リソースオーナーの名前: <%- data.user %>
 		
-		  <p>Movies:</p>
+		  <p>映画:</p>
 		  <ul>
 			  <% _.each(data.favorites.movies, function(v) { %>
 				  <li><%- v %>
 			  <% }); %>
 		  </ul>
-		  <p>Foods:</p>
+		  <p>食べ物:</p>
 		  <ul>
 			  <% _.each(data.favorites.foods, function(v) { %>
 				  <li><%- v %>
 			  <% }); %>
 		  </ul>
-		  <p>Music:</p>
+		  <p>音楽:</p>
 		  <ul>
 			  <% _.each(data.favorites.music, function(v) { %>
 				  <li><%- v %>
 			  <% }); %>
 		  </ul>
 		  
-		  <a href="/favorites" class="btn btn-default">Get Favorites</a>
+		  <a href="/favorites" class="btn btn-default">好物を取得</a>
+		  <a href="/" class="btn btn-default">トップページに戻る</a>
 		  
       </div>
 

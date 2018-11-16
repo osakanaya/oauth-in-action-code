@@ -154,6 +154,7 @@ var getAccessToken = function(req, res, next) {
 	
 };
 
+// アクセストークンの存在を確認する（存在しなければエラー）
 var requireAccessToken = function(req, res, next) {
 	if (req.access_token) {
 		next();
@@ -163,54 +164,66 @@ var requireAccessToken = function(req, res, next) {
 };
 
 
+// 保存された単語のリスト
 var savedWords = [];
 
 app.get('/words', getAccessToken, requireAccessToken, function(req, res) {
-	if (__.contains(req.access_token.scope, 'read')) {
-		res.json({words: savedWords.join(' '), timestamp: Date.now()});
+  var scopes = req.access_token.scope.split(' ');
+  
+	if (__.contains(scopes, 'read')) {
+    res.json({words: savedWords.join(' '), timestamp: Date.now()});
 	} else {
 		res.set('WWW-Authenticate', 'Bearer realm=localhost:9002, error="insufficient_scope", scope="read"');
-		res.status(403);
+		res.status(403).end();
 	}
 });
 
+// リストに単語を追加する
 app.post('/words', getAccessToken, requireAccessToken, function(req, res) {
-	if (__.contains(req.access_token.scope, 'write')) {
+  var scopes = req.access_token.scope.split(' ');
+
+	if (__.contains(scopes, 'write')) {
 		if (req.body.word) {
 			savedWords.push(req.body.word);
 		}
 		res.status(201).end();
 	} else {
 		res.set('WWW-Authenticate', 'Bearer realm=localhost:9002, error="insufficient_scope", scope="write"');
-		res.status(403);
+		res.status(403).end();
 	}
 });
 
+// リストに単語を追加する
 app.delete('/words', getAccessToken, requireAccessToken, function(req, res) {
-	if (__.contains(req.access_token.scope, 'delete')) {
+  var scopes = req.access_token.scope.split(' ');
+
+	if (__.contains(scopes, 'delete')) {
 		savedWords.pop();
 		res.status(201).end();
 	} else {
 		res.set('WWW-Authenticate', 'Bearer realm=localhost:9002, error="insufficient_scope", scope="delete"');
-		res.status(403);
+		res.status(403).end();
 	}
 });
 
+// 好きな農産物のリストを表示する
 app.get('/produce', getAccessToken, requireAccessToken, function(req, res) {
+  var scopes = req.access_token.scope.split(' ');
+
 	var produce = {fruit: [], veggies: [], meats: []};
-	if (__.contains(req.access_token.scope, 'fruit')) {
+	if (__.contains(scopes, 'fruit')) {
 		produce.fruit = ['apple', 'banana', 'kiwi'];
 	}
-	if (__.contains(req.access_token.scope, 'veggies')) {
+	if (__.contains(scopes, 'veggies')) {
 		produce.veggies = ['lettuce', 'onion', 'potato'];
 	}
-	if (__.contains(req.access_token.scope, 'meats')) {
+	if (__.contains(scopes, 'meats')) {
 		produce.meats = ['bacon', 'steak', 'chicken breast'];
 	}
-	console.log('Sending produce: ', produce);
 	res.json(produce);
 });
 
+// 好物を取得
 var aliceFavorites = {
 	'movies': ['The Multidmensional Vector', 'Space Fights', 'Jewelry Boss'],
 	'foods': ['bacon', 'pizza', 'bacon pizza'],
@@ -224,9 +237,9 @@ var bobFavories = {
 };
 
 app.get('/favorites', getAccessToken, requireAccessToken, function(req, res) {
-	if (req.access_token.user == 'alice') {
+	if (req.access_token.user == 'Alice') {
 		res.json({user: 'Alice', favorites: aliceFavorites});
-	} else if (req.access_token.user == 'bob') {
+	} else if (req.access_token.user == 'Bob') {
 		res.json({user: 'Bob', favorites: bobFavorites});
 	} else {
 		var unknown = {user: 'Unknown', favorites: {movies: [], foods: [], music: []}};

@@ -122,7 +122,7 @@ var registerClient = function() {
 		grant_types: ['authorization_code', 'refresh_token'], // サポートする認可フローの種類
 		response_types: ['code'],
 		token_endpoint_auth_method: 'secret_basic',           // Token Endpointへクライアントアプリケーションが認証する方法（Authorizationヘッダによる認証）
-		scope: 'openid profile email address phone'           // スコープ
+		scope: 'openid profile email address phone read write delete fruit veggies meats'           // スコープ
 	};
 
   // 登録リクエストを送る
@@ -423,15 +423,35 @@ app.get('/fetch_resource', function(req, res) {
 	}
 });
 
-// TODO:他の保護リソースへのアクセスを実現する
+// Words APIにアクセスするための画面を表示する
 app.get('/words', function (req, res) {
 
 	res.render('words', {words: '', timestamp: 0, result: null});
 	
 });
 
+// リストにある単語数を取得する
 app.get('/get_words', function (req, res) {
 
+	if (!access_token) {
+    // アクセストークンがない場合
+		if (refresh_token) {
+      // リフレッシュトークンがある場合は、アクセストークンを新規に発行する（再発行後、トップページへ移動）
+			refreshAccessToken(req, res);
+			return;
+		} else {
+      // リフレッシュトークンがない場合＝アクセストークンも無いので、保護リソースへのアクセスは拒否する
+			res.render('error', {error: 'アクセストークンがありません'});
+			return;
+		}
+	}
+	
+  // IDトークンの正当性をチェックする
+  if (!validateIdToken(id_token)) {
+    res.render('error', {error: 'IDトークンは有効ではありません'});
+    return;
+  }
+  
 	var headers = {
 		'Authorization': 'Bearer ' + access_token,
 		'Content-Type': 'application/x-www-form-urlencoded'
@@ -454,8 +474,28 @@ app.get('/get_words', function (req, res) {
 	
 });
 
+// リストに単語を追加する
 app.get('/add_word', function (req, res) {
 	
+	if (!access_token) {
+    // アクセストークンがない場合
+		if (refresh_token) {
+      // リフレッシュトークンがある場合は、アクセストークンを新規に発行する（再発行後、トップページへ移動）
+			refreshAccessToken(req, res);
+			return;
+		} else {
+      // リフレッシュトークンがない場合＝アクセストークンも無いので、保護リソースへのアクセスは拒否する
+			res.render('error', {error: 'アクセストークンがありません'});
+			return;
+		}
+	}
+	
+  // IDトークンの正当性をチェックする
+  if (!validateIdToken(id_token)) {
+    res.render('error', {error: 'IDトークンは有効ではありません'});
+    return;
+  }
+  
 	var headers = {
 		'Authorization': 'Bearer ' + access_token,
 		'Content-Type': 'application/x-www-form-urlencoded'
@@ -466,7 +506,7 @@ app.get('/add_word', function (req, res) {
 	var resource = request('POST', wordApi,
 		{headers: headers, body: form_body}
 	);
-	
+
 	if (resource.statusCode >= 200 && resource.statusCode < 300) {
 		res.render('words', {words: '', timestamp: 0, result: 'add'});
 		return;
@@ -478,8 +518,28 @@ app.get('/add_word', function (req, res) {
 
 });
 
+// リストから単語を削除する
 app.get('/delete_word', function (req, res) {
-
+	
+	if (!access_token) {
+    // アクセストークンがない場合
+		if (refresh_token) {
+      // リフレッシュトークンがある場合は、アクセストークンを新規に発行する（再発行後、トップページへ移動）
+			refreshAccessToken(req, res);
+			return;
+		} else {
+      // リフレッシュトークンがない場合＝アクセストークンも無いので、保護リソースへのアクセスは拒否する
+			res.render('error', {error: 'アクセストークンがありません'});
+			return;
+		}
+	}
+	
+  // IDトークンの正当性をチェックする
+  if (!validateIdToken(id_token)) {
+    res.render('error', {error: 'IDトークンは有効ではありません'});
+    return;
+  }
+  
 	var headers = {
 		'Authorization': 'Bearer ' + access_token,
 		'Content-Type': 'application/x-www-form-urlencoded'
@@ -500,7 +560,27 @@ app.get('/delete_word', function (req, res) {
 	
 });
 
+// Produce APIにアクセスする
 app.get('/produce', function(req, res) {
+	if (!access_token) {
+    // アクセストークンがない場合
+		if (refresh_token) {
+      // リフレッシュトークンがある場合は、アクセストークンを新規に発行する（再発行後、トップページへ移動）
+			refreshAccessToken(req, res);
+			return;
+		} else {
+      // リフレッシュトークンがない場合＝アクセストークンも無いので、保護リソースへのアクセスは拒否する
+			res.render('error', {error: 'アクセストークンがありません'});
+			return;
+		}
+	}
+	
+  // IDトークンの正当性をチェックする
+  if (!validateIdToken(id_token)) {
+    res.render('error', {error: 'IDトークンは有効ではありません'});
+    return;
+  }
+  
 	var headers = {
 		'Authorization': 'Bearer ' + access_token,
 		'Content-Type': 'application/x-www-form-urlencoded'
@@ -521,7 +601,27 @@ app.get('/produce', function(req, res) {
 	
 });
 
+// Favorites APIにアクセスする
 app.get('/favorites', function(req, res) {
+	if (!access_token) {
+    // アクセストークンがない場合
+		if (refresh_token) {
+      // リフレッシュトークンがある場合は、アクセストークンを新規に発行する（再発行後、トップページへ移動）
+			refreshAccessToken(req, res);
+			return;
+		} else {
+      // リフレッシュトークンがない場合＝アクセストークンも無いので、保護リソースへのアクセスは拒否する
+			res.render('error', {error: 'アクセストークンがありません'});
+			return;
+		}
+	}
+	
+  // IDトークンの正当性をチェックする
+  if (!validateIdToken(id_token)) {
+    res.render('error', {error: 'IDトークンは有効ではありません'});
+    return;
+  }
+  
 	var headers = {
 		'Authorization': 'Bearer ' + access_token,
 		'Content-Type': 'application/x-www-form-urlencoded'
@@ -533,7 +633,6 @@ app.get('/favorites', function(req, res) {
 	
 	if (resource.statusCode >= 200 && resource.statusCode < 300) {
 		var body = JSON.parse(resource.getBody());
-		console.log('Got data: ', body);
 		res.render('favorites', {scope: scope, data: body});
 		return;
 	} else {
