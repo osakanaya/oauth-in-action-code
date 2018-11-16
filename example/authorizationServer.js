@@ -56,10 +56,6 @@ var clients = [
 	}
 ];
 
-// 共有鍵の情報
-// TODO:これ使われているの？
-var sharedTokenSecret = "shared token secret!";
-
 // 認可サーバの公開鍵と秘密鍵
 var rsaKey = {
   "alg": "RS256",

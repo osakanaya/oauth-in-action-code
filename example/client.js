@@ -235,50 +235,15 @@ app.get("/callback", function(req, res){
           }
         }
         
-				if (payload.iss == 'http://localhost:9001/') {
-          // IDトークンが期待される認可サーバ（IdP）から発行されたかをチェック
-					console.log('IDトークンの発行元　＝　OK');
-
-					if ((Array.isArray(payload.aud) && _.contains(payload.aud, client.client_id)) || 
-						payload.aud == client.client_id) {
-            // IDトークンの発行先が自分自身であることをチェック
-						console.log('IDトークンの発行先　＝　OK');
-				
-            // IDトークンの有効期限内であることをチェック
-						var now = Math.floor(Date.now() / 1000);
-				
-						if (payload.iat <= now) {
-							console.log('IDトークンの発行時刻≦現在時刻　＝　OK');
-							if (payload.exp >= now) {
-								console.log('IDトークンの有効期限≧現在時刻　＝　OK');
-						
-								console.log('IDトークンは正しいです！');
-		
-								id_token = payload;
-						
-							} else {
-                console.log('IDトークンは有効期限切れです');
-                res.render('error', {error: 'IDトークンは有効期限切れです'});
-                return;
-              }
-						} else {
-              console.log('IDトークンは有効期限切れです');
-              res.render('error', {error: 'IDトークンは有効期限切れです'});
-              return;
-            }
-					} else {
-            console.log('IDトークンの発行先が正しくありません： %s', payload.aud);
-            res.render('error', {error: 'IDトークンの発行先が正しくありません：'});
-            return;
-          }
-				} else {
-          console.log('IDトークンの発行元が正しくありません： %s', payload.iss);
-          res.render('error', {error: 'IDトークンの発行元が正しくありません'});
-          return;
+        // IDトークンの有効性を検証する
+        if (validateIdToken(payload)) {
+          id_token = payload;
+        } else {
+          res.render('error', {error: 'IDトークンは有効ではありません'});
         }
 			} else {
         console.log('IDトークンの署名を検証できませんでした');
-        res.render('error', {error: 'IDトークンの署名を検証できませんでした'});
+        res.render('error', {error: 'IDトークンは有効ではありません'});
         return;
       }
 		}
@@ -293,6 +258,45 @@ app.get("/callback", function(req, res){
 		res.render('error', {error: 'アクセストークンを取得できませんでした。認可サーバのレスポンス：: ' + tokRes.statusCode})
 	}
 });
+
+// IDトークンの有効性を検証する
+var validateIdToken = function(id_token) {
+  if (id_token.iss == 'http://localhost:9001/') {
+    // IDトークンが期待される認可サーバ（IdP）から発行されたかをチェック
+    console.log('IDトークンの発行元　＝　OK');
+
+    if ((Array.isArray(id_token.aud) && _.contains(id_token.aud, client.client_id)) || 
+      id_token.aud == client.client_id) {
+      // IDトークンの発行先が自分自身であることをチェック
+      console.log('IDトークンの発行先　＝　OK');
+  
+      // IDトークンの有効期限内であることをチェック
+      var now = Math.floor(Date.now() / 1000);
+  
+      if (id_token.iat <= now) {
+        console.log('IDトークンの発行時刻≦現在時刻　＝　OK');
+        if (id_token.exp >= now) {
+          console.log('IDトークンの有効期限≧現在時刻　＝　OK');
+          console.log('IDトークンは正しいです！');
+
+          return true;
+        } else {
+          console.log('IDトークンは有効期限切れです');
+          return false;
+        }
+      } else {
+        console.log('IDトークンは有効期限切れです');
+        return false;
+      }
+    } else {
+      console.log('IDトークンの発行先が正しくありません： %s', id_token.aud);
+      return false;
+    }
+  } else {
+    console.log('IDトークンの発行元が正しくありません： %s', id_token.iss);
+    return false;
+  }
+};
 
 // リフレッシュトークンからアクセストークンを再発行する
 // 認可サーバでの認可を受け取るコールバック
@@ -366,8 +370,6 @@ var refreshAccessToken = function(req, res) {
 
 // 保護リソースにアクセスする
 // TODO:他の保護リソースへのアクセスを実現する
-// TODO:IDトークンの正当性をチェックする（有効期限）
-// TODO:アクセストークンのみのRevocationを試す（リフレッシュトークンによる発行を確認するため）
 app.get('/fetch_resource', function(req, res) {
 
 	if (!access_token) {
@@ -383,6 +385,12 @@ app.get('/fetch_resource', function(req, res) {
 		}
 	}
 	
+  // IDトークンの正当性をチェックする
+  if (!validateIdToken(id_token)) {
+    res.render('error', {error: 'IDトークンは有効ではありません'});
+    return;
+  }
+  
 	console.log('保護リソースへリクエストします。 アクセストークン： %s', access_token);
 	
 	var headers = {
@@ -414,8 +422,6 @@ app.get('/fetch_resource', function(req, res) {
 			return;
 		}
 	}
-	
-	
 });
 
 app.get('/words', function (req, res) {
