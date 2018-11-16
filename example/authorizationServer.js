@@ -28,6 +28,7 @@ var authServer = {
 	tokenEndpoint: 'http://localhost:9001/token',               // Token Endpoint
   introspectionEndpoint: 'http://localhost:9001/introspect',  // Introspection Endpoint
 	registrationEndpoint: 'http://localhost:9001/register',     // Registration Endpoint
+	revocationEndpoint: 'http://localhost:9001/revoke',         // Revocation Endopoint
   // TODO:その他のエンドポイント情報を乗せ、トップページで表示できるようにする
 };
 
@@ -286,6 +287,7 @@ app.post('/approve', function(req, res) {
 });
 
 // アクセストークン、リフレッシュトークン、IDトークンを生成する
+// TODO:Implicit Grantの場合、リフレッシュトークンの生成は不要
 var generateTokens = function (req, res, clientId, user, scope, nonce) {
   
   // リフレッシュトークンを生成する
@@ -352,12 +354,12 @@ var generateTokens = function (req, res, clientId, user, scope, nonce) {
   }
   
   // アクセストークンを登録する
-	nosql.insert({ access_token: access_token, client_id: clientId, scope: scope, user: user, iss: at_payload.iss, iat: at_payload.iat, exp: at_payload.exp });
+	nosql.insert({ token_type: 'access_token', access_token: access_token, refresh_token: refresh_token, client_id: clientId, scope: scope, user: user, iss: at_payload.iss, iat: at_payload.iat, exp: at_payload.exp });
 	console.log('アクセストークンを発行しました： %s', access_token);
 	console.log('アクセストークンのスコープ： %s', scope);
 
   // リフレッシュトークンを登録する
-  nosql.insert({ refresh_token: refresh_token, client_id: clientId, scope: scope, user: user });
+  nosql.insert({ token_type: 'refresh_token', refresh_token: refresh_token, client_id: clientId, scope: scope, user: user });
 	console.log('リフレッシュトークンを発行しました： %s', refresh_token);
   
   if (id_token) {
@@ -519,20 +521,26 @@ app.post("/token", function(req, res){
 	}
 });
 
+// Revocation Endpointの実装
 app.post('/revoke', function(req, res) {
+
+  /*
+    クライアント認証情報を確認する
+  */
+  
 	var auth = req.headers['authorization'];
 	if (auth) {
-		// check the auth header
+    // Authorizationヘッダを確認する
 		var clientCredentials = new Buffer(auth.slice('basic '.length), 'base64').toString().split(':');
 		var clientId = querystring.unescape(clientCredentials[0]);
 		var clientSecret = querystring.unescape(clientCredentials[1]);
 	}
 	
-	// otherwise, check the post body
+	// フォームパラメータを確認する
 	if (req.body.client_id) {
 		if (clientId) {
-			// if we've already seen the client's credentials in the authorization header, this is an error
-			console.log('Client attempted to authenticate with multiple methods');
+      // Authorizationヘッダとフォームパラメータの両方にクライアントIDがある場合は、エラーとする
+			console.log('クライアントが複数の方法で認証しようとしています');
 			res.status(401).json({error: 'invalid_client'});
 			return;
 		}
@@ -541,26 +549,50 @@ app.post('/revoke', function(req, res) {
 		var clientSecret = req.body.client_secret;
 	}
 	
+  // クライアントが登録されているかを確認する
 	var client = getClient(clientId);
 	if (!client) {
-		console.log('Unknown client %s', clientId);
+    // クライアントが存在しない場合、エラー
+		console.log('未知のクライアント： %s', clientId);
 		res.status(401).json({error: 'invalid_client'});
 		return;
 	}
 	
+  // クライアントシークレットが一致しない場合は、エラー
 	if (client.client_secret != clientSecret) {
-		console.log('Mismatched client secret, expected %s got %s', client.client_secret, clientSecret);
+		console.log('クライアントシークレットが一致しません（期待される値： %s, 実際の値： %s）', client.client_secret, clientSecret);
 		res.status(401).json({error: 'invalid_client'});
 		return;
 	}
-	
-	var inToken = req.body.token;
+
+  // token_type_hintが指定されていない場合は、refresh_tokenを設定
+  var inTokenType = req.body.token_type_hint;
+  
+  if (!inTokenType) {
+      inTokenType = 'refresh_token';
+  }
+  // トークンの種類が不正の場合、エラー
+  if (inTokenType != 'access_token' && inTokenType != 'refresh_token') {
+		console.log('サポートされていないトークンの種類です： %s', inTokenType);
+		res.status(400).json({error: 'unsupported_token_type'});
+		return;
+  }
+  
+  // アクセストークンの登録を削除する
 	nosql.remove(function(token) {
-		if (token.access_token == inToken && token.client_id == clientId) {
-			return true;	
-		}
+    if (!token) {
+      if (inTokenType == 'access_token') {
+        if (token.token_type == inTokenType && token.access_token == inToken && token.client_id == clientId) {
+          return true;
+        }
+      } else if (inTokenType == 'refresh_token') {
+        if (token.refresh_token == inToken && token.client_id == clientId) {
+          return true;	
+        }
+      }
+    }
 	}, function(err, count) {
-		console.log("Removed %s tokens", count);
+		console.log("トークンを取り消しました。件数: %s件", count);
 		res.status(204).end();
 		return;
 	});

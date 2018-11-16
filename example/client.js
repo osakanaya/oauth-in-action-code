@@ -519,29 +519,54 @@ app.get('/favorites', function(req, res) {
 	
 });
 
+// アクセストークン・リフレッシュトークンを取り消すページを表示する
 app.get('/revoke', function(req, res) {
 	res.render('revoke', {access_token: access_token, refresh_token: refresh_token, scope: scope});
 });
 
+// アクセストークン・リフレッシュトークンを取り消す
 app.post('/revoke', function(req, res) {
-	var form_data = qs.stringify({
-		token: access_token
-	});
+  // フォームデータを生成する
+  var form_data;
+  if (req.body.token_type == 'access_token') {
+    form_data = qs.stringify({
+      token: access_token,
+      token_type_hint: req.body.token_type
+    });
+  } else if (req.body.token_type == 'refresh_token') {
+    form_data = qs.stringify({
+      token: refresh_token,
+      token_type_hint: req.body.token_type
+    });
+  } else {
+		res.render('error', {error: 'サポートされていないトークンの種類です： ' + req.body.token_type});
+		return;
+  }
+  
+  // Revocation Endopointにリクエストを送信する
 	var headers = {
 		'Content-Type': 'application/x-www-form-urlencoded',
  		'Authorization': 'Basic ' + new Buffer(querystring.escape(client.client_id) + ':' + querystring.escape(client.client_secret)).toString('base64')
 	};
-	console.log('Revoking token %s', access_token);
+  
+  if (req.body.token_type == 'access_token') {
+    console.log('アクセストークンを取り消しています： %s', access_token);
+  } else if (req.body.token_type == 'refresh_token') {
+    console.log('リフレッシュトークンを取り消しています： %s', refresh_token);
+  }
 	var tokRes = request('POST', authServer.revocationEndpoint, 
 		{
 			body: form_data,
 			headers: headers
 		}
 	);
-	
+
+	// クライアントアプリケーションで持っているトークン情報をクリアする
 	access_token = null;
-	refresh_token = null;
 	scope = null;
+  if (req.body.token_type == 'refresh_token') {
+    refresh_token = null;
+  }
 	
 	if (tokRes.statusCode >= 200 && tokRes.statusCode < 300) {
 		res.render('revoke', {access_token: access_token, refresh_token: refresh_token, scope: scope});
