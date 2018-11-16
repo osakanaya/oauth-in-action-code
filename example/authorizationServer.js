@@ -286,17 +286,19 @@ app.post('/approve', function(req, res) {
 	
 });
 
-// アクセストークン、リフレッシュトークン、IDトークンを生成する
-// TODO:Implicit Grantの場合、リフレッシュトークンの生成は不要
-var generateTokens = function (req, res, clientId, user, scope, nonce) {
-  
-  // リフレッシュトークンを生成する
+// リフレッシュトークンを生成し、登録する
+var generateRefreshToken = function(clientId, user, scope) {
   var refresh_token = randomstring.generate();
-  
-  /*
-    アクセストークンをJWT形式で生成する
-  */
-  
+
+  // リフレッシュトークンを登録する
+  nosql.insert({ token_type: 'refresh_token', refresh_token: refresh_token, client_id: clientId, scope: scope, user: user });
+  console.log('リフレッシュトークンを発行しました： %s', refresh_token);
+
+  return refresh_token;
+};
+
+// アクセストークンを生成する
+var generateAccessToken = function(clientId, user, scope, refresh_token) {
   // ヘッダ
 	var at_header = { 'typ': 'JWT', 'alg': 'RS256', 'kid': rsaKey.kid};
 
@@ -319,53 +321,68 @@ var generateTokens = function (req, res, clientId, user, scope, nonce) {
 	var privateKey = jose.KEYUTIL.getKey(rsaKey);
   // アクセストークンに署名する
 	var access_token = jose.jws.JWS.sign('RS256', at_stringHeader, at_stringPayload, privateKey);
-
-  /*
-    IDトークンを生成する
-  */
-
-  var id_token;
-  
-  // スコープに「openid」が含まれていれば、IDトークンを生成する
-  if (__.contains(scope, 'openid') && user) {
-    // ヘッダ
-    var it_header = { 'typ': 'JWT', 'alg': 'RS256', 'kid': rsaKey.kid};
-    
-    // ペイロード
-    var it_payload = {};
-    it_payload.iss = 'http://localhost:9001/';                    // IDトークンの発行元（IdP）
-    it_payload.sub = user.sub;                                    // IDトークンのサブジェクト（ユーザ）
-    it_payload.aud = clientId;                                    // IDトークンの発行先（クライアントID）
-    it_payload.iat = Math.floor(Date.now() / 1000);               // IDトークンの発行日時
-    it_payload.exp = Math.floor(Date.now() / 1000) + (5 * 60);    // IDトークンの有効期限
-
-    // nonceが指定されていればそれを含める
-    if (nonce) {
-      it_payload.nonce = nonce;
-    }
-
-    // ヘッダ、ペイロードを文字列にする
-    var it_stringHeader = JSON.stringify(it_header);
-    var it_stringPayload = JSON.stringify(it_payload);
-    
-    // 署名されたIDトークンを作成する
-    // IDトークンに署名する
-    id_token = jose.jws.JWS.sign('RS256', it_stringHeader, it_stringPayload, privateKey);
-  }
   
   // アクセストークンを登録する
 	nosql.insert({ token_type: 'access_token', access_token: access_token, refresh_token: refresh_token, client_id: clientId, scope: scope, user: user, iss: at_payload.iss, iat: at_payload.iat, exp: at_payload.exp });
 	console.log('アクセストークンを発行しました： %s', access_token);
 	console.log('アクセストークンのスコープ： %s', scope);
-
-  // リフレッシュトークンを登録する
-  nosql.insert({ token_type: 'refresh_token', refresh_token: refresh_token, client_id: clientId, scope: scope, user: user });
-	console.log('リフレッシュトークンを発行しました： %s', refresh_token);
   
-  if (id_token) {
-    console.log('IDトークンを発行しました： %s', id_token);
+  return access_token;
+};
+
+// IDトークンを生成する
+var generateIdToken = function(clientId, user, nonce) {
+
+  // ヘッダ
+  var it_header = { 'typ': 'JWT', 'alg': 'RS256', 'kid': rsaKey.kid};
+  
+  // ペイロード
+  var it_payload = {};
+  it_payload.iss = 'http://localhost:9001/';                    // IDトークンの発行元（IdP）
+  it_payload.sub = user.sub;                                    // IDトークンのサブジェクト（ユーザ）
+  it_payload.aud = clientId;                                    // IDトークンの発行先（クライアントID）
+  it_payload.iat = Math.floor(Date.now() / 1000);               // IDトークンの発行日時
+  it_payload.exp = Math.floor(Date.now() / 1000) + (5 * 60);    // IDトークンの有効期限
+
+  // nonceが指定されていればそれを含める
+  if (nonce) {
+    it_payload.nonce = nonce;
   }
 
+  // ヘッダ、ペイロードを文字列にする
+  var it_stringHeader = JSON.stringify(it_header);
+  var it_stringPayload = JSON.stringify(it_payload);
+  
+  // 署名されたIDトークンを作成する
+  // 認可サーバの秘密鍵
+	var privateKey = jose.KEYUTIL.getKey(rsaKey);
+
+  // IDトークンに署名する
+  var id_token = jose.jws.JWS.sign('RS256', it_stringHeader, it_stringPayload, privateKey);
+
+  console.log('IDトークンを発行しました： %s', id_token);
+  return id_token;
+};
+
+// アクセストークン、リフレッシュトークン、IDトークンを生成する
+var generateTokens = function (req, res, clientId, user, scope, nonce, needsRefreshToken) {
+  
+  // リフレッシュトークンを生成する
+  var refresh_token;
+  if (needsRefreshToken) {
+    refresh_token = generateRefreshToken(clientId, user, scope);
+  }
+  
+  // アクセストークンを生成する
+  var access_token = generateAccessToken(clientId, user, scope, refresh_token);
+
+  // スコープに「openid」が含まれていれば、IDトークンを生成する
+  var id_token;
+
+  if (__.contains(scope, 'openid') && user) {
+    id_token = generateIdToken(clientId, user, nonce);
+  }
+  
   // レスポンスを返す
 	var cscope = null;
 	if (scope) {
@@ -433,7 +450,7 @@ app.post("/token", function(req, res){
         // 認可コード発行リクエストと認証情報のクライアントIDが一致する場合
 
         // アクセストークン、リフレッシュトークン、IDトークンを発行する
-				var token_response = generateTokens(req, res, clientId, code.user, code.scope, code.request.nonce);
+				var token_response = generateTokens(req, res, clientId, code.user, code.scope, code.request.nonce, true);
 
 				res.status(200).json(token_response);
 				console.log('認可コード： %sに対してアクセストークンを発行しました', req.body.code);
@@ -469,26 +486,43 @@ app.post("/token", function(req, res){
 		return;	
 		
 	} else if (req.body.grant_type == 'refresh_token') {
+    // リフレッシュトークンを発行する
+    
+    // リフレッシュトークンが存在するかを確認する
 		nosql.all(function(token) {
-			return (token.refresh_token == req.body.refresh_token);
+			return (token.token_type == 'refresh_token' && token.refresh_token == req.body.refresh_token);
 		}, function(err, tokens) {
 			if (tokens.length == 1) {
+        // すでに発行済みのリフレッシュトークンが見つかった
 				var token = tokens[0];
 				if (token.client_id != clientId) {
-					console.log('Invalid client using a refresh token, expected %s got %s', token.client_id, clientId);
+          // リフレッシュトークンの発行先のクライアントIDと、実際のクライアントIDが異なる場合はエラー
+					console.log('クライアントが不正です（期待されるクライアントID： %s, 実際のクライアントID： %s）', token.client_id, clientId);
+          
+          // エラーの場合、リフレッシュトークンを削除してしまう
 					nosql.remove(function(found) { return (found == token); }, function () {} );
 					res.status(400).end();
 					return
 				}
-				console.log("We found a matching token: %s", req.body.refresh_token);
-				var access_token = randomstring.generate();
-				var token_response = { access_token: access_token, token_type: 'Bearer',  refresh_token: req.body.refresh_token };
-				nosql.insert({ access_token: access_token, client_id: clientId });
-				console.log('Issuing access token %s for refresh token %s', access_token, req.body.refresh_token);
+        
+				console.log("一致するリフレッシュトークンが見つかりました： %s", req.body.refresh_token);
+        
+        // アクセストークンを再発行する
+        var access_token = generateAccessToken(clientId, token.user, token.scope, req.body.refresh_token);
+        
+        // レスポンスを返す
+        var cscope = null;
+        if (token.scope) {
+          cscope = token.scope.join(' ');
+        }
+        
+				var token_response = { access_token: access_token, token_type: 'Bearer',  refresh_token: req.body.refresh_token, scope: cscope };
+
+        console.log('アクセストークンを再発行しました（アクセストークン： %s, リフレッシュトークン： %s）', access_token, req.body.refresh_token);
 				res.status(200).json(token_response);
 				return;
 			} else {
-				console.log('No matching token was found.');
+				console.log('マッチするリフレッシュトークンはありませんでした。');
 				res.status(401).end();
 			}
 		});

@@ -200,7 +200,6 @@ app.get("/callback", function(req, res){
 
 		if (body.refresh_token) {
       // リフレッシュトークンが発行された場合
-      // TODO:リフレッシュトークンの発行を試みる
 			refresh_token = body.refresh_token;
 			console.log('リフレッシュトークンが発行されました： %s', refresh_token);
 		}
@@ -296,20 +295,35 @@ app.get("/callback", function(req, res){
 });
 
 // リフレッシュトークンからアクセストークンを再発行する
+// 認可サーバでの認可を受け取るコールバック
+app.get("/refresh_token", function(req, res){
+  // リフレッシュトークンがない場合はエラー
+  if (!refresh_token) {
+			res.render('error', {error: 'リフレッシュトークンがありません'});
+			return;
+  }
+
+  // リフレッシュトークンを発行する
+  refreshAccessToken(req, res);
+	
+});
+
+// リフレッシュトークンからアクセストークンを再発行する
 var refreshAccessToken = function(req, res) {
   // Token Endpointへリクエストする
-  // TODO:クライアントIDとクライアントシークレットは、Authorizationヘッダに設定すべきでは？（たぶんバグ）
 	var form_data = qs.stringify({
 				grant_type: 'refresh_token',
 				refresh_token: refresh_token,
-				client_id: client.client_id,
-				client_secret: client.client_secret,
 				redirect_uri: client.redirect_uri
-			});
+	});
+
 	var headers = {
-		'Content-Type': 'application/x-www-form-urlencoded'
+		'Content-Type': 'application/x-www-form-urlencoded',
+    // クライアントアプリケーションのクライアントIDとクライアントシークレットを設定する
+		'Authorization': 'Basic ' + new Buffer(querystring.escape(client.client_id) + ':' + querystring.escape(client.client_secret)).toString('base64')
 	};
-	console.log('リフレッシュトークンを使ってアクセストークンを再発行します： %s', refresh_token);
+
+  console.log('リフレッシュトークンを使ってアクセストークンを再発行します： %s', refresh_token);
 	var tokRes = request('POST', authServer.tokenEndpoint, 
 		{	
 			body: form_data,
@@ -334,11 +348,15 @@ var refreshAccessToken = function(req, res) {
 		console.log('実際に認可されたスコープ： %s', scope);
 	
     // 再度、リダイレクトして保護リソースへのアクセスを試みる
-		res.redirect('/fetch_resource');
+		res.redirect('/');
 		return;
 	} else {
     // リフレッシュトークンからアクセストークンが再発行できなかった場合
 		console.log('リフレッシュトークンが無いため、ユーザに新しいアクセストークンを取得するように要求します');
+    
+    access_token = null;
+    scope = null;
+    refresh_token = null;
     
     // 認可サーバの同意画面へ結果的にリダイレクトする
 		res.redirect('/authorize');
