@@ -30,11 +30,7 @@ var resource = {
 	"description": "This data has been protected by OAuth 2.0"
 };
 
-// TODO:この共有鍵はどこで使われるの？
-var sharedTokenSecret = "shared token secret!";
-
 // 認可サーバの公開鍵
-// TODO:この公開鍵はどこで使われるの？
 var rsaKey = {
   "alg": "RS256",
   "e": "AQAB",

@@ -21,7 +21,6 @@ app.set('view engine', 'html');
 app.set('views', 'files/authorizationServer');
 app.set('json spaces', 4);
 
-// authorization server information
 // 認可サーバの情報
 var authServer = {
 	authorizationEndpoint: 'http://localhost:9001/authorize',   // AuthorizationEndpoint
@@ -29,7 +28,7 @@ var authServer = {
   introspectionEndpoint: 'http://localhost:9001/introspect',  // Introspection Endpoint
 	registrationEndpoint: 'http://localhost:9001/register',     // Registration Endpoint
 	revocationEndpoint: 'http://localhost:9001/revoke',         // Revocation Endopoint
-  // TODO:その他のエンドポイント情報を乗せ、トップページで表示できるようにする
+  userInfoEndpoint: 'http://localhost:9001/userinfo',         // Userinfo Endpoint
 };
 
 // 認可サーバに登録されているクライアントアプリケーションの情報
@@ -78,7 +77,7 @@ var protectedResources = [
 // ユーザ情報（OpenID Connectで認証されるユーザの情報となる）
 var userInfo = {
 
-	"alice": {
+	"Alice": {
 		"sub": "9XE3-JI34-00132A",
 		"preferred_username": "alice",
 		"name": "Alice",
@@ -86,7 +85,7 @@ var userInfo = {
 		"email_verified": true
 	},
 	
-	"bob": {
+	"Bob": {
 		"sub": "1ZT5-OE63-57383B",
 		"preferred_username": "bob",
 		"name": "Bob",
@@ -94,7 +93,7 @@ var userInfo = {
 		"email_verified": false
 	},
 
-	"carol": {
+	"Carol": {
 		"sub": "F5Q1-L6LGG-959FS",
 		"preferred_username": "carol",
 		"name": "Carol",
@@ -199,7 +198,16 @@ app.post('/approve', function(req, res) {
 			var code = randomstring.generate(8);
 			
       // 同意画面で選択したユーザ＝認可サーバで認証したユーザを取得する
-			var user = req.body.user;
+			var user = getUser(req.body.user);
+      
+      if (!user) {
+        // ユーザが存在しない場合、エラー
+				var urlParsed = buildUrl(query.redirect_uri, {
+					error: 'invalid_request'
+				});
+				res.redirect(urlParsed);
+				return;
+      }
       
       // リソースオーナーが同意画面で指定したスコープ
 			var scope = getScopesFromForm(req.body);
@@ -227,6 +235,7 @@ app.post('/approve', function(req, res) {
 			res.redirect(urlParsed);
 			return;
 		} else if (query.response_type == 'token') {
+      // TODO:Implicit Grantでのアクセストークン発行
 			var user = req.body.user;
 		
 			var scope = getScopesFromForm(req.body);
@@ -287,7 +296,7 @@ var generateRefreshToken = function(clientId, user, scope) {
   var refresh_token = randomstring.generate();
 
   // リフレッシュトークンを登録する
-  nosql.insert({ token_type: 'refresh_token', refresh_token: refresh_token, client_id: clientId, scope: scope, user: user });
+  nosql.insert({ token_type: 'refresh_token', refresh_token: refresh_token, client_id: clientId, scope: scope, sub: user.sub, user: user.name });
   console.log('リフレッシュトークンを発行しました： %s', refresh_token);
 
   return refresh_token;
@@ -301,7 +310,7 @@ var generateAccessToken = function(clientId, user, scope, refresh_token) {
   // ペイロード
 	var at_payload = {};
 	at_payload.iss = 'http://localhost:9001/';                 // アクセストークンの発行元（認可サーバ）
-	at_payload.sub = user;                                     // アクセストークンのサブジェクト（リソースオーナー）
+	at_payload.sub = user.sub;                                 // アクセストークンのサブジェクト（リソースオーナー）
 	at_payload.aud = 'http://localhost:9002/';                 // アクセストークンの発行先（保護リソース）
 	at_payload.iat = Math.floor(Date.now() / 1000);            // アクセストークンの発行日時
 	at_payload.exp = Math.floor(Date.now() / 1000) + (5 * 60); // アクセストークンの有効期限
@@ -319,7 +328,7 @@ var generateAccessToken = function(clientId, user, scope, refresh_token) {
 	var access_token = jose.jws.JWS.sign('RS256', at_stringHeader, at_stringPayload, privateKey);
   
   // アクセストークンを登録する
-	nosql.insert({ token_type: 'access_token', access_token: access_token, refresh_token: refresh_token, client_id: clientId, scope: scope, user: user, iss: at_payload.iss, iat: at_payload.iat, exp: at_payload.exp });
+	nosql.insert({ token_type: 'access_token', access_token: access_token, refresh_token: refresh_token, client_id: clientId, scope: scope, sub: user.sub, user: user.name, iss: at_payload.iss, iat: at_payload.iat, exp: at_payload.exp });
 	console.log('アクセストークンを発行しました： %s', access_token);
 	console.log('アクセストークンのスコープ： %s', scope);
   
@@ -445,8 +454,17 @@ app.post("/token", function(req, res){
 			if (code.request.client_id == clientId) {
         // 認可コード発行リクエストと認証情報のクライアントIDが一致する場合
 
+        // ユーザの存在をチェックする
+        var user = getUser(code.user.name);
+        
+        if (!user) {
+          console.log('未知のユーザ： %s', code.user.name);
+          res.status(401).json({error: 'invalid_grant'});
+          return;
+        } 
+  
         // アクセストークン、リフレッシュトークン、IDトークンを発行する
-				var token_response = generateTokens(req, res, clientId, code.user, code.scope, code.request.nonce, true);
+				var token_response = generateTokens(req, res, clientId, user, code.scope, code.request.nonce, true);
 
 				res.status(200).json(token_response);
 				console.log('認可コード： %sに対してアクセストークンを発行しました', req.body.code);
@@ -501,10 +519,19 @@ app.post("/token", function(req, res){
 					return
 				}
         
-				console.log("一致するリフレッシュトークンが見つかりました： %s", req.body.refresh_token);
+        console.log("一致するリフレッシュトークンが見つかりました： %s", req.body.refresh_token);
         
+        // ユーザの存在をチェックする
+        var user = getUser(token.user);
+        
+        if (!user) {
+          console.log('未知のユーザ： %s', token.user);
+          res.status(401).json({error: 'invalid_grant'});
+          return;
+        } 
+
         // アクセストークンを再発行する
-        var access_token = generateAccessToken(clientId, token.user, token.scope, req.body.refresh_token);
+        var access_token = generateAccessToken(clientId, user, token.scope, req.body.refresh_token);
         
         // レスポンスを返す
         var cscope = null;
@@ -910,31 +937,46 @@ app.delete('/register/:clientId', validateConfigurationEndpointRequest, function
 	
 });
 
+// Userinfo Endpointへのリクエストに際し、アクセストークンをチェックする
 var getAccessToken = function(req, res, next) {
-	// check the auth header first
+  // クライアント認証情報をチェックする
 	var auth = req.headers['authorization'];
 	var inToken = null;
 	if (auth && auth.toLowerCase().indexOf('bearer') == 0) {
 		inToken = auth.slice('bearer '.length);
 	} else if (req.body && req.body.access_token) {
-		// not in the header, check in the form body
 		inToken = req.body.access_token;
 	} else if (req.query && req.query.access_token) {
 		inToken = req.query.access_token
 	}
 	
-	console.log('Incoming token: %s', inToken);
+	console.log('受信したアクセストークン： %s', inToken);
+  
+  // DB上の登録情報から、マッチするアクセストークンを検出する
 	nosql.one(function(token) {
 		if (token.access_token == inToken) {
 			return token;	
 		}
 	}, function(err, token) {
 		if (token) {
-			console.log("We found a matching token: %s", inToken);
+			console.log("一致するアクセストークンがありました: %s", inToken);
 		} else {
-			console.log('No matching token was found.');
+			console.log('一致するアクセストークンはありません');
 		}
-		req.access_token = token;
+    
+    // アクセストークンが有効期限切れでないことをチェック
+    var now = Math.floor(Date.now() / 1000);
+    
+    if (token.iat <= now) {
+      console.log('アクセストークンの発行時刻≦現在時刻　＝　OK');
+      if (token.exp >= now) {
+        console.log('アクセストークンの有効期限≧現在時刻　＝　OK');
+        console.log('アクセストークンはOKです！');
+        
+        req.access_token = token;
+      }
+    }
+
 		next();
 		return;
 	});
@@ -948,19 +990,23 @@ var requireAccessToken = function(req, res, next) {
 	}
 };
 
+// Userinfo Endpointの実装
 var userInfoEndpoint = function(req, res) {
-	
+
+  // アクセストークンのスコープにopenidが含まれていることをチェック
 	if (!__.contains(req.access_token.scope, 'openid')) {
 		res.status(403).end();
 		return;
 	}
 	
+  // ユーザが存在すすることをチェック
 	var user = userInfo[req.access_token.user];
 	if (!user) {
 		res.status(404).end();
 		return;
 	}
 	
+  // スコープごとにユーザ情報を取得する
 	var out = {};
 	__.each(req.access_token.scope, function (scope) {
 		if (scope == 'openid') {
@@ -996,6 +1042,7 @@ var userInfoEndpoint = function(req, res) {
 		}
 	});
 	
+  // ユーザ情報を返却する
 	res.status(200).json(out);
 	return;
 };

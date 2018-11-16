@@ -369,7 +369,6 @@ var refreshAccessToken = function(req, res) {
 };
 
 // 保護リソースにアクセスする
-// TODO:他の保護リソースへのアクセスを実現する
 app.get('/fetch_resource', function(req, res) {
 
 	if (!access_token) {
@@ -424,6 +423,7 @@ app.get('/fetch_resource', function(req, res) {
 	}
 });
 
+// TODO:他の保護リソースへのアクセスを実現する
 app.get('/words', function (req, res) {
 
 	res.render('words', {words: '', timestamp: 0, result: null});
@@ -601,8 +601,26 @@ app.post('/revoke', function(req, res) {
 	}
 });
 
+// ユーザ情報を取得する
 app.get('/userinfo', function(req, res) {
+
+  // アクセストークンがあることを確認する
+	if (!access_token) {
+    // アクセストークンがない場合
+    res.render('error', {error: 'アクセストークンがありません'});
+    return;
+	}
 	
+  // IDトークンの正当性をチェックする
+  if (!validateIdToken(id_token)) {
+    res.render('error', {error: 'IDトークンは有効ではありません'});
+    return;
+  }
+  
+	
+  // 認可サーバ（IdP）へユーザ情報を問い合わせる
+	console.log('ユーザ情報を取得します。 アクセストークン： %s', access_token);
+
 	var headers = {
 		'Authorization': 'Bearer ' + access_token
 	};
@@ -612,14 +630,14 @@ app.get('/userinfo', function(req, res) {
 	);
 	if (resource.statusCode >= 200 && resource.statusCode < 300) {
 		var body = JSON.parse(resource.getBody());
-		console.log('Got data: ', body);
+		console.log('ユーザ情報を取得しました： ', body);
 	
 		userInfo = body;
 	
 		res.render('userinfo', {userInfo: userInfo, id_token: id_token});
 		return;
 	} else {
-		res.render('error', {error: 'Unable to fetch user information'});
+		res.render('error', {error: 'ユーザ情報を取得することができませんでした'});
 		return;
 	}
 	
