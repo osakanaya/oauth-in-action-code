@@ -527,6 +527,7 @@ app.post("/token", function(req, res){
 			}
 		});
 	} else if (req.body.grant_type == 'password') {
+    // TODO: Resource Owner Password Credentials Grant
 		var username = req.body.username;
 		var user = getUser(username);
 		if (!user) {

@@ -373,7 +373,7 @@ app.get('/fetch_resource', function(req, res) {
 	if (!access_token) {
     // アクセストークンがない場合
 		if (refresh_token) {
-      // リフレッシュトークンがある場合は、アクセストークンを新規に発行する
+      // リフレッシュトークンがある場合は、アクセストークンを新規に発行する（再発行後、トップページへ移動）
 			refreshAccessToken(req, res);
 			return;
 		} else {
@@ -406,7 +406,7 @@ app.get('/fetch_resource', function(req, res) {
     // アクセストークンをクリアする
 		access_token = null;
 		if (refresh_token) {
-      // リフレッシュトークンがあれば、アクセストークンを再発行し、再度保護リソースへのアクセスを試みる
+      // リフレッシュトークンがあれば、アクセストークンを再発行する（再発行後、トップページへ移動）
 			refreshAccessToken(req, res);
 			return;
 		} else {
