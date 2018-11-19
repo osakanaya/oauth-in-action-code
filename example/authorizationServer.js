@@ -158,11 +158,9 @@ app.get("/authorize", function(req, res){
 
     // 登録されていないスコープをリクエストした場合、エラー
 		if (__.difference(rscope, cscope).length > 0) {
-			var urlParsed = buildUrl(req.query.redirect_uri, {
-				error: 'invalid_scope'
-			});
-			res.redirect(urlParsed);
-			return;
+      console.log('不正なスコープがリクエストされました： %s', rscope);
+      res.status(400).render('error', {error: 'invalid_scope'});
+      return;
 		}
 		
     // リクエストIDを生成する
