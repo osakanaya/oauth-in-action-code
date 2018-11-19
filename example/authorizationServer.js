@@ -138,7 +138,7 @@ app.get("/authorize", function(req, res){
 	
 	if (!client) {
     // 登録されているクライアントがなければエラー
-		console.log('Unknown client %s', req.query.client_id);
+		console.log('未知のクライアント %s', req.query.client_id);
 		res.render('error', {error: '未知のクライアント'});
 		return;
 	} else if (!__.contains(client.redirect_uris, req.query.redirect_uri)) {
@@ -862,14 +862,18 @@ app.post('/register', function (req, res){
 	return;
 });
 
+// Registration Endpointに送信されたアクセストークンをチェックする
 var validateConfigurationEndpointRequest = function (req, res, next) {
+  // リクエストされたクライアントIDに対してクライアントアプリケーションが登録されていることをチェックする
 	var clientId = req.params.clientId;
 	var client = getClient(clientId);
 	if (!client) {
+    // 登録されていなければエラー
 		res.status(404).end();
 		return;
 	}
 
+  // アクセストークンの存在をチェックする
 	var auth = req.headers['authorization'];
 	if (auth && auth.toLowerCase().indexOf('bearer') == 0) {
 		var regToken = auth.slice('bearer '.length);
@@ -879,29 +883,33 @@ var validateConfigurationEndpointRequest = function (req, res, next) {
 			next();
 			return;
 		} else {
+      // アクセストークンが一致しない場合はエラー
 			res.status(403).end();
 			return;
 		}
 		
 	} else {
+    // Authorizationヘッダにアクセストークンがセットされていなければエラー
 		res.status(401).end();
 		return;
 	}
 
 };
 
+// クライアントの登録情報を取得する
 app.get('/register/:clientId', validateConfigurationEndpointRequest, function(req, res) {
-	res.status(200).json(client);
+	res.status(200).json(req.client);
 });
 
+// クライアントの登録情報を更新する
 app.put('/register/:clientId', validateConfigurationEndpointRequest, function(req, res) {
 
-	if (req.body.client_id != client.client_id) {
+	if (req.body.client_id != req.client.client_id) {
 		res.status(400).json({error: 'invalid_client_metadata'});
 		return;
 	}
 	
-	if (req.body.client_secret && req.body.client_secret != client.client_secret) {
+	if (req.body.client_secret && req.body.client_secret != req.client.client_secret) {
 		res.status(400).json({error: 'invalid_client_metadata'});
 	}
 
@@ -910,26 +918,26 @@ app.put('/register/:clientId', validateConfigurationEndpointRequest, function(re
 		return;
 	}
 
-	__.each(client, function(value, key, list) {
-		client[key] = reg[key];
-	});
 	__.each(reg, function(value, key, list) {
-		client[key] = reg[key];
+		req.client[key] = reg[key];
 	});
 
-	res.status(200).json(client);
+	res.status(200).json(req.client);
 	
 });
 
+// クライアントの登録情報を削除する
 app.delete('/register/:clientId', validateConfigurationEndpointRequest, function(req, res) {
-	clients = __.reject(clients, __.matches({client_id: client.client_id}));
+  // クライアントの登録情報を削除する
+	clients = __.reject(clients, __.matches({client_id: req.client.client_id}));
 
+  // 削除するクライアントに対して発行されたアクセストークン、リフレッシュトークンを削除（Revoke）する
 	nosql.remove(function(token) {
-		if (token.client_id == clientId) {
+		if (token.client_id == req.client.client_id) {
 			return true;	
 		}
 	}, function(err, count) {
-		console.log("Removed %s tokens", count);
+		console.log("%s 件のアクセストークン・リフレッシュトークンを削除しました。", count);
 	});
 	
 	res.status(204).end();

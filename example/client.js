@@ -72,6 +72,142 @@ app.get('/', function (req, res) {
 	res.render('index', {access_token: access_token, refresh_token: refresh_token, scope: scope, id_token_raw: id_token_raw});
 });
 
+// クライアントアプリケーションの登録管理画面を表示する
+app.get('/client_mgmt', function (req, res) {
+  // クライアントが登録されていない場合は、エラー
+	if (!client.client_id) {
+    res.render('error', {error: 'クライアントアプリケーションがまだ登録されていません。'});
+    return;
+	}
+
+  // 認可サーバからクライアントの登録情報を削除する
+  var headers = {
+    'Accept': 'application/json',
+    'Authorization': 'Bearer ' + client.registration_access_token
+  };
+  
+  var regRes = request('GET', client.registration_client_uri, {
+    headers: headers
+  });
+  
+  if (regRes.statusCode == 200) {
+    var client_info = JSON.parse(regRes.getBody());
+    console.log('取得したクライアント登録情報： %s', regRes.getBody());
+    
+    res.render('client_mgmt', {client: client_info});
+    return;
+  } else {
+    res.render('error', {error: 'クライアント情報を取得することができませんでした。 ' + regRes.statusCode});
+    return;
+  }
+});
+
+// クライアントアプリケーションの登録情報（クライアント名）を更新する
+app.post('/update_client', function(req, res) {
+
+  // クライアントが登録されていない場合は、エラー
+	if (!client.client_id) {
+    res.render('error', {error: 'クライアントアプリケーションがまだ登録されていません。'});
+    return;
+	}
+
+  // 認可サーバに登録されたクライアント情報を更新する
+  var headers = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'Authorization': 'Bearer ' + client.registration_access_token
+  };
+  
+  var reg = __.clone(client);
+  delete reg['client_id_issued_at'];
+  delete reg['client_secret_expires_at'];
+  delete reg['registration_client_uri'];
+  delete reg['registration_access_token'];
+  
+  reg.client_name = req.body.client_name;
+  
+  console.log("クライアントアプリケーションの更新情報を送信します: " + JSON.stringify(reg));
+  
+  var regRes = request('PUT', client.registration_client_uri, {
+    body: JSON.stringify(reg),
+    headers: headers
+  });
+  
+  if (regRes.statusCode == 200) {
+    client = JSON.parse(regRes.getBody());
+    // トップページに戻る
+    res.render('index', {access_token: access_token, refresh_token: refresh_token, scope: scope, id_token_raw: id_token_raw});
+    return;
+  } else {
+    res.render('error', {error: 'クライアントアプリケーションの登録情報を更新できませんでした： ' + regRes.statusCode});
+    return;
+  }
+
+  // 認可サーバからクライアントの登録情報を削除する
+  var headers = {
+    'Authorization': 'Bearer ' + client.registration_access_token
+  };
+  
+  var regRes = request('DELETE', client.registration_client_uri, {
+    headers: headers
+  });
+  
+  if (regRes.statusCode == 204) {
+    // クライアントで保持するクライアント情報、トークン情報（アクセストークン、リフレッシュトークン、IDトークン）をクリアする
+    client = {};
+
+    access_token = null;
+    refresh_token = null;
+    scope = null;
+    
+    id_token = null;
+    id_token_raw = null;
+
+    // トップページに戻る
+    res.render('index', {access_token: access_token, refresh_token: refresh_token, scope: scope, id_token_raw: id_token_raw});
+    return;
+  } else {
+    res.render('error', {error: 'クライアントアプリケーションの登録を解除できませんでした： ' + regRes.statusCode});
+  }
+});
+
+// クライアントアプリケーションの登録を解除する
+app.get('/unregister_client', function(req, res) {
+
+  // クライアントが登録されていない場合は、エラー
+	if (!client.client_id) {
+    res.render('error', {error: 'クライアントアプリケーションがまだ登録されていません。'});
+    return;
+	}
+
+  // 認可サーバからクライアントの登録情報を削除する
+  var headers = {
+    'Authorization': 'Bearer ' + client.registration_access_token
+  };
+  
+  var regRes = request('DELETE', client.registration_client_uri, {
+    headers: headers
+  });
+  
+  if (regRes.statusCode == 204) {
+    // クライアントで保持するクライアント情報、トークン情報（アクセストークン、リフレッシュトークン、IDトークン）をクリアする
+    client = {};
+
+    access_token = null;
+    refresh_token = null;
+    scope = null;
+    
+    id_token = null;
+    id_token_raw = null;
+
+    // トップページに戻る
+    res.render('index', {access_token: access_token, refresh_token: refresh_token, scope: scope, id_token_raw: id_token_raw});
+    return;
+  } else {
+    res.render('error', {error: 'クライアントアプリケーションの登録を解除できませんでした： ' + regRes.statusCode});
+  }
+});
+
 // 認可サーバにリダイレクトする
 app.get('/authorize', function(req, res){
 
