@@ -37,10 +37,15 @@
     <div class="container">
 
       <div class="jumbotron">
-      <p>スコープ： <span class="label label-danger oauth-scope-value"></span></p>
       <p>アクセストークン： <span class="label label-danger oauth-access-token"></span></p>
+      <p>スコープ： <span class="label label-danger oauth-scope-value"></span></p>
+      <p>IDトークン： <span class="label label-danger oauth-id-token"></span></p>
       <button class="btn btn-default oauth-authorize" type="button">アクセストークンを取得する</button> 
       <button class="btn btn-default oauth-fetch-resource" type="button">保護リソースにアクセスする</button>
+      </div>
+      <div class="jumbotron">
+      <h2>エラーメッセージ：</h2>
+      <pre><span class="oauth-error-messages"</pre>
       </div>
       <div class="jumbotron">
       <h2>保護リソースから受信したデータ：</h2>
@@ -49,35 +54,52 @@
     </div><!-- /.container -->
   
     <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+    <script src="/js/jquery.min.js"></script>
     <!-- Include all compiled plugins (below), or include individual files as needed -->
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+    <script src="/js/bootstrap.min.js"></script>
 
+    <script language="JavaScript" type="text/javascript" src="/js/jsrsasign-latest-all-min.js"></script>
+    <script language="JavaScript" type="text/javascript" src="/js/base64.js"></script>
+    
     <script>
-
       (function () {
         var callbackData;
+        
+        // 認可サーバの公開鍵
+        var rsaKey = {
+          "alg": "RS256",
+          "e": "AQAB",
+          "n": "p8eP5gL1H_H9UNzCuQS-vNRVz3NWxZTHYk1tG9VpkfFjWNKG3MFTNZJ1l5g_COMm2_2i_YhQNH8MJ_nQ4exKMXrWJB4tyVZohovUxfw-eLgu1XQ8oYcVYW8ym6Um-BkqwwWL6CXZ70X81YyIMrnsGTyTV6M8gBPun8g2L8KbDbXR1lDfOOWiZ2ss1CRLrmNM-GRp3Gj-ECG7_3Nx9n_s5to2ZtwJ1GS1maGjrSZ9GRAYLrHhndrL_8ie_9DS2T-ML7QNQtNkg2RvLv4f0dpjRYI23djxVtAylYK4oiT_uEMgSkc4dxwKwGuBxSO0g9JOobgfy0--FUHHYtRi0dOFZw",
+          "kty": "RSA",
+          "kid": "authserver"
+        };
 
-        // client information
+        // クライアントアプリケーションの情報
         var client = {
+          // クライアントID
           'client_id': 'oauth-client-1',
+          // リダイレクトURI
           'redirect_uris': ['http://localhost:9000/callback'],
+          // クライアントアプリケーションのスコープ
           'scope': 'openid profile email address phone'
         };
 
-        // authorization server information
+        // 認可サーバの情報
         var authServer = {
+          // Authorization Endpoint
           authorizationEndpoint: 'http://localhost:9001/authorize'
         };
 
+        // 保護リソースの情報
         var protectedResource = 'http://localhost:9002/resource';
 
+        // state/nonceパラメータの値を生成する
         function generateState(len) {
           var ret = '';
           var possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
           for (var i=0; i < len; i++) {
-            // add random character
+            // ランダムに文字を割り付ける
             ret += possible.charAt(Math.floor(Math.random() * possible.length));  
           }
           
@@ -86,10 +108,12 @@
 
         // Authorization Endpointの認可画面を表示する
         function handleAuthorizationRequestClick(ev) {
+          // state/nonceパラメータの値を設定し、事前に保存しておく
           var state = generateState(32);
           var nonce = generateState(32);
 
           localStorage.setItem('oauth-state', state);
+          localStorage.setItem('oauth-nonce', nonce);
 
           // 認可サーバにリダイレクトする
           location.href = authServer.authorizationEndpoint + '?' + 
@@ -101,8 +125,16 @@
             '&redirect_uri=' + encodeURIComponent(client.redirect_uris[0]);
         }
 
+        // 保護リソースにアクセスする
         function handleFetchResourceClick(ev) {
           if (callbackData != null ) {
+            // IDトークンの正当性をチェックする
+            if (!validateIdToken(callbackData.id_token_payload)) {
+              $('.oauth-error-messages').text('IDトークンは有効ではありません');
+              return;
+            }
+            
+            console.log('保護リソースへリクエストします。 アクセストークン： %s', callbackData.access_token);
 
             $.ajax({
               url: protectedResource,
@@ -115,16 +147,17 @@
             }).done(function(data) {
               $('.oauth-protected-resource').text(JSON.stringify(data));
             }).fail(function() {
-              $('.oauth-protected-resource').text('Error while fetching the protected resource');
+              $('.oauth-error-messages').text('保護リソースへのアクセスでエラーが発生しました');
             });
-
+          } else {
+            $('.oauth-error-messages').text('アクセストークンがありません');
           }
         }
 
         // 認可サーバでクライアントアプリケーションを認可した後に受けるコールバック
         function processCallback() {
           var h = location.hash.substring(1);
-          var whitelist = ['access_token', 'state', 'id_token']; // for parameters
+          var whitelist = ['access_token', 'state', 'id_token'];
 
           callbackData = {};
 
@@ -135,25 +168,110 @@
               callbackData[d[0]] = d[1];  
             }
           });
-          
+         
+          // stateパラメータの値が一致することをチェックする
           if (callbackData.state !== localStorage.getItem('oauth-state')) {
+         
             console.log('stateパラメータの値が一致しません（期待される値： %s、実際の値： %s）', localStorage.getItem('oauth-state'), callbackData.state);
             callbackData = null;
-            $('.oauth-protected-resource').text("エラー： stateパラメータの値が一致しません");
+            $('.oauth-error-messages').text("エラー： stateパラメータの値が一致しません");
+            
+            return;
           } else {
             $('.oauth-access-token').text(callbackData.access_token);
             console.log('発行されたアクセストークン： ', callbackData.access_token);
           }
+          
+          if (callbackData.id_token) {
+            // IDトークンが発行された場合
+            console.log('発行されたIDトークン： ', callbackData.id_token);
+            $('.oauth-id-token').text(callbackData.id_token);
+            
+            // 認可サーバの公開鍵で、IDトークンの署名を検証する
+            var pubKey = KEYUTIL.getKey(rsaKey);
+            var signatureValid = KJUR.jws.JWS.verify(callbackData.id_token, pubKey, ['RS256']);
+            if (signatureValid) {
+              // 署名が正しい場合
+              console.log('署名が検証されました。');
+
+              // IDトークンのPayloadを抽出し、Base64URLデコードする
+              var tokenParts = callbackData.id_token.split('.');
+              var payload = JSON.parse(Base64.decode(tokenParts[1]));
+              console.log('IDトークンのペイロード：', payload);
+
+              // nonceがある場合、それを付き合わせる
+              var nonce = localStorage.getItem('oauth-nonce');
+              if (payload.nonce) {
+                if (payload.nonce == nonce) {
+                  console.log('nonceパラメータの値がマッチしました。（アクセストークン発行リクエスト時の値：%s, 認可サーバから受け取った値：%s）', nonce, payload.nonce);
+                } else {
+                  console.log('nonceパラメータの値がマッチしません。（アクセストークン発行リクエスト時の値：%s, 認可サーバから受け取った値：%s）', nonce, payload.nonce);
+                  $('.oauth-error-messages').text("エラー： nonceパラメータの値がマッチしません");
+                  return;
+                }
+              }
+
+              // IDトークンの有効性を検証する
+              if (validateIdToken(payload)) {
+                callbackData.id_token_payload = payload;
+              } else {
+                $('.oauth-error-messages').text("エラー： IDトークンは有効ではありません");
+              }
+            } else {
+              console.log('IDトークンの署名を検証できませんでした');
+              $('.oauth-error-messages').text("エラー： IDトークンは有効ではありません");
+              return;
+            }
+          }
+        }
+        
+        // IDトークンを検証する
+        function validateIdToken(id_token) {
+          if (id_token.iss == 'http://localhost:9001/') {
+            // IDトークンが期待される認可サーバ（IdP）から発行されたかをチェック
+            console.log('IDトークンの発行元　＝　OK');
+
+            if ((Array.isArray(id_token.aud) && _.contains(id_token.aud, client.client_id)) || 
+              id_token.aud == client.client_id) {
+              // IDトークンの発行先が自分自身であることをチェック
+              console.log('IDトークンの発行先　＝　OK');
+          
+              // IDトークンの有効期限内であることをチェック
+              var now = Math.floor(Date.now() / 1000);
+          
+              if (id_token.iat <= now) {
+                console.log('IDトークンの発行時刻≦現在時刻　＝　OK');
+                if (id_token.exp >= now) {
+                  console.log('IDトークンの有効期限≧現在時刻　＝　OK');
+                  console.log('IDトークンは正しいです！');
+
+                  return true;
+                } else {
+                  console.log('IDトークンは有効期限切れです');
+                  return false;
+                }
+              } else {
+                console.log('IDトークンは有効期限切れです');
+                return false;
+              }
+            } else {
+              console.log('IDトークンの発行先が正しくありません： %s', id_token.aud);
+              return false;
+            }
+          } else {
+            console.log('IDトークンの発行元が正しくありません： %s', id_token.iss);
+            return false;
+          }
         }
 
-        // fill placeholder on UI
+        // クライアントアプリケーションのスコープを表示する
         $('.oauth-scope-value').text(client.scope);
 
-        // UI button click handler
+        // ボタンにイベントハンドラを割り当てる
         $('.oauth-authorize').on('click', handleAuthorizationRequestClick);
         $('.oauth-fetch-resource').on('click', handleFetchResourceClick);
         
-        // we got a hash as a callback
+        // ハッシュ値がある→認可サーバからのコールバックとして処理する
         if (location.hash) {
           processCallback();
         }
