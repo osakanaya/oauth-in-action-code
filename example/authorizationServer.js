@@ -34,6 +34,7 @@ var authServer = {
 // 認可サーバに登録されているクライアントアプリケーションの情報
 var clients = [
 	{
+    // Implicit Grantを想定したクライアントアプリケーション（Public Client）
 		"client_id": "oauth-client-1",
 		"client_secret": "oauth-client-secret-1",
 		"redirect_uris": ["http://localhost:9000/callback"],
@@ -42,6 +43,7 @@ var clients = [
 		"client_name": "OAuth in Action Exercise Client"
 	},
 	{
+    // Client Credentails Grantを想定したクライアントアプリケーション
 		"client_id": "oauth-client-2",
 		"client_secret": "oauth-client-secret-1",
 		"redirect_uris": ["http://localhost:9000/callback"],
@@ -316,7 +318,9 @@ var generateAccessToken = function(clientId, user, scope, refresh_token) {
   // ペイロード
 	var at_payload = {};
 	at_payload.iss = 'http://localhost:9001/';                 // アクセストークンの発行元（認可サーバ）
-	at_payload.sub = user.sub;                                 // アクセストークンのサブジェクト（リソースオーナー）
+  if (user) {
+    at_payload.sub = user.sub;                               // アクセストークンのサブジェクト（リソースオーナー）
+  }
 	at_payload.aud = 'http://localhost:9002/';                 // アクセストークンの発行先（保護リソース）
 	at_payload.iat = Math.floor(Date.now() / 1000);            // アクセストークンの発行日時
 	at_payload.exp = Math.floor(Date.now() / 1000) + (5 * 60); // アクセストークンの有効期限
@@ -334,9 +338,20 @@ var generateAccessToken = function(clientId, user, scope, refresh_token) {
 	var access_token = jose.jws.JWS.sign('RS256', at_stringHeader, at_stringPayload, privateKey);
   
   // アクセストークンを登録する
-	nosql.insert({ token_type: 'access_token', access_token: access_token, refresh_token: refresh_token, client_id: clientId, scope: scope, sub: user.sub, user: user.name, iss: at_payload.iss, iat: at_payload.iat, exp: at_payload.exp });
-	console.log('アクセストークンを発行しました： %s', access_token);
-	console.log('アクセストークンのスコープ： %s', scope);
+	nosql.insert({ 
+    token_type: 'access_token', 
+    access_token: access_token, 
+    refresh_token: refresh_token, 
+    client_id: clientId, 
+    scope: scope, 
+    sub: user ? user.sub : "", 
+    user: user ? user.name : "", 
+    iss: at_payload.iss, 
+    iat: at_payload.iat, 
+    exp: at_payload.exp });
+
+  console.log('アクセストークンを発行しました： %s', access_token);
+  console.log('アクセストークンのスコープ： %s', scope);
   
   return access_token;
 };
@@ -397,7 +412,11 @@ var generateTokens = function (req, res, clientId, user, scope, nonce, needsRefr
   // レスポンスを返す
 	var cscope = null;
 	if (scope) {
-		cscope = scope.join(' ')
+    if (__.isArray(scope)) {
+      cscope = scope.join(' ');
+    } else {
+      cscope = scope;
+    }
 	}
 
 	var token_response = { access_token: access_token, token_type: 'Bearer',  refresh_token: refresh_token, scope: cscope, id_token: id_token };
@@ -489,22 +508,27 @@ app.post("/token", function(req, res){
 			return;
 		}
 	} else if (req.body.grant_type == 'client_credentials') {
-		var scope = req.body.scope ? req.body.scope.split(' ') : undefined;
-		var client = getClient(query.client_id);
+    /*
+      Client Credentials Grantの場合
+    */
+    
+    // アクセストークン発行依頼でクライアントアプリケーションが指定したスコープ
+    var rscope = req.body.scope ? req.body.scope.split(' ') : undefined;
+    
+    // クライアントアプリケーションとして登録されたスコープ
 		var cscope = client.scope ? client.scope.split(' ') : undefined;
-		if (__.difference(scope, cscope).length > 0) {
-			// client asked for a scope it couldn't have
+		if (__.difference(rscope, cscope).length > 0) {
+			// クライアントアプリケーションが指定したスコープ＞登録されたスコープの場合、エラー
 			res.status(400).json({error: 'invalid_scope'});
 			return;
 		}
 
-		var access_token = randomstring.generate();
-		var token_response = { access_token: access_token, token_type: 'Bearer', scope: scope.join(' ') };
-		nosql.insert({ access_token: access_token, client_id: clientId, scope: scope });
-		console.log('Issuing access token %s', access_token);
-		res.status(200).json(token_response);
-		return;	
-		
+    // アクセストークンを発行する
+    var token_response = generateTokens(req, res, clientId, null, req.body.scope, "", false);
+
+    res.status(200).json(token_response);
+    console.log('アクセストークンを発行しました： %s', token_response.access_token);
+    return;
 	} else if (req.body.grant_type == 'refresh_token') {
     // リフレッシュトークンを発行する
     
@@ -706,7 +730,11 @@ app.post('/introspect', function(req, res) {
 			introspectionResponse.iss = token.iss;
 			introspectionResponse.sub = token.sub;
       introspectionResponse.user = token.user;
-			introspectionResponse.scope = token.scope.join(' ');
+      if (__.isArray(token.scope)) {
+        introspectionResponse.scope = token.scope.join(' ');
+      } else {
+        introspectionResponse.scope = token.scope;
+      }
 			introspectionResponse.client_id = token.client_id;
       introspectionResponse.iat = token.iat;
       introspectionResponse.exp = token.exp;
