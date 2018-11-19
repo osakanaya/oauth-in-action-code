@@ -167,6 +167,7 @@ var requireAccessToken = function(req, res, next) {
 // 保存された単語のリスト
 var savedWords = [];
 
+app.options('/words', cors());
 app.get('/words', getAccessToken, requireAccessToken, function(req, res) {
   var scopes = req.access_token.scope.split(' ');
   
@@ -207,6 +208,7 @@ app.delete('/words', getAccessToken, requireAccessToken, function(req, res) {
 });
 
 // 好きな農産物のリストを表示する
+app.options('/produce', cors());
 app.get('/produce', getAccessToken, requireAccessToken, function(req, res) {
   var scopes = req.access_token.scope.split(' ');
 
@@ -236,6 +238,7 @@ var bobFavories = {
 	'music': ['baroque', 'ukulele', 'baroque ukulele']
 };
 
+app.options('/favorites', cors());
 app.get('/favorites', getAccessToken, requireAccessToken, function(req, res) {
 	if (req.access_token.user == 'Alice') {
 		res.json({user: 'Alice', favorites: aliceFavorites});
@@ -247,10 +250,8 @@ app.get('/favorites', getAccessToken, requireAccessToken, function(req, res) {
 	}
 });
 
-// CORS対応（Implicit Grantが対象とするJavascriptアプリケーション用）
-app.options('/resource', cors());
-
 // 基本的なデータを取得する
+app.options('/resource', cors());
 app.post("/resource", cors(), getAccessToken, function(req, res){
 
   // アクセストークンが指定されたかどうかをチェックする
