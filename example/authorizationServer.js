@@ -37,7 +37,7 @@ var clients = [
 		"client_id": "oauth-client-1",
 		"client_secret": "oauth-client-secret-1",
 		"redirect_uris": ["http://localhost:9000/callback"],
-		"scope": "foo bar",
+		"scope": "openid profile email address phone",
 		"logo_uri": "https://images.manning.com/720/960/resize/book/e/14336f9-6493-46dc-938c-11a34c9d20ac/Richer-OAuth2-HI.png",
 		"client_name": "OAuth in Action Exercise Client"
 	},
@@ -235,15 +235,29 @@ app.post('/approve', function(req, res) {
 			res.redirect(urlParsed);
 			return;
 		} else if (query.response_type == 'token') {
-      // TODO:Implicit Grantでのアクセストークン発行
-			var user = req.body.user;
-		
+      /*
+        Implicit Grantでのアクセストークン発行
+      */
+      
+      // 同意画面で選択したユーザ＝認可サーバで認証したユーザを取得する
+			var user = getUser(req.body.user);
+
+      if (!user) {
+        // ユーザが存在しない場合、エラー
+				console.log('未知のユーザ %s', user)
+				res.status(500).render('error', {error: '未知のユーザ ' + user});
+				return;
+      }
+
+      // リソースオーナーが同意画面で指定したスコープ
 			var scope = getScopesFromForm(req.body);
 
+      // クライアントアプリケーションとして登録されたスコープ
 			var client = getClient(query.client_id);
 			var cscope = client.scope ? client.scope.split(' ') : undefined;
+
+      // リソースオーナーが指定したスコープ＞登録されたスコープの場合、エラー
 			if (__.difference(scope, cscope).length > 0) {
-				// client asked for a scope it couldn't have
 				var urlParsed = buildUrl(query.redirect_uri, {
 					error: 'invalid_scope'
 				});
@@ -251,27 +265,19 @@ app.post('/approve', function(req, res) {
 				return;
 			}
 
-			var user = userInfo[user];
-			if (!user) {		
-				console.log('Unknown user %s', user)
-				res.status(500).render('error', {error: 'Unknown user ' + user});
-				return;
-			}
-	
-			console.log("User %j", user);
+      // アクセストークン、IDトークンを発行する
+      var token_response = generateTokens(req, res, query.client_id, user, cscope, query.nonce, false);
 
-			var token_response = generateTokens(req, res, query.clientId, user, cscope);		
-
-			var params = {};
 			if (query.state) {
-				params.state = query.state;
-			} 				
-			var urlParsed = buildUrl(query.redirect_uri, params, qs.stringify(token_response));
+        token_response.state = query.state;
+			}
+      
+			var urlParsed = buildUrl(query.redirect_uri, {}, qs.stringify(token_response));
 			res.redirect(urlParsed);
 			return;
 
 		} else {
-			// we got a response type we don't understand
+			// 不正なresponse_typeが指定されていた場合
 			var urlParsed = buildUrl(query.redirect_uri, {
 				error: 'unsupported_response_type'
 			});
