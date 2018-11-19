@@ -227,6 +227,11 @@
         
         // IDトークンを検証する
         function validateIdToken(id_token) {
+          // そもそもIDトークンがない場合は無効とする
+          if (!id_token) {
+            return false;
+          }
+          
           if (id_token.iss == 'http://localhost:9001/') {
             // IDトークンが期待される認可サーバ（IdP）から発行されたかをチェック
             console.log('IDトークンの発行元　＝　OK');

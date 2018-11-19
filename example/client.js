@@ -397,6 +397,11 @@ app.get("/callback", function(req, res){
 
 // IDトークンの有効性を検証する
 var validateIdToken = function(id_token) {
+  // そもそもIDトークンがない場合は無効
+  if (!id_token) {
+    return false;
+  }
+  
   if (id_token.iss == 'http://localhost:9001/') {
     // IDトークンが期待される認可サーバ（IdP）から発行されたかをチェック
     console.log('IDトークンの発行元　＝　OK');
@@ -878,22 +883,48 @@ app.get('/userinfo', function(req, res) {
 	
 });
 
+// ログイン画面を表示する（Resource Owner Password Credentails Grant）
 app.get('/username_password', function(req, res) {
+	if (!client.client_id) {
+    // クライアント情報が登録されていなかったら、Registration Endpointを使ってクライアントを登録する
+		registerClient();
+		if (!client.client_id) {
+      // クライアント情報が登録できなかったらエラー
+			res.render('error', {error: 'クライアントアプリケーションを登録できませんでした。'});
+			return;
+		}
+	}
+	
+  // アクセストークンなどをいったんクリアする
+	access_token = null;
+	refresh_token = null;
+	scope = null;
+  
+  id_token = null;
+  id_token_raw = null;
+
 	res.render('username_password');
 	return;
 });
 
+// アクセストークンを取得する（Resource Owner Password Credentails Grant）
 app.post('/username_password', function(req, res) {
 	
 	var username = req.body.username;
 	var password = req.body.password;
 	
+  // IDトークンの発行に際し、nonceパラメータを生成する
+  nonce = randomstring.generate();
+
 	var form_data = qs.stringify({
 				grant_type: 'password',
 				username: username,
-				password: password
+				password: password,
+        scope: client.scope,
+        nonce: nonce
 			});
-	var headers = {
+
+  var headers = {
 		'Content-Type': 'application/x-www-form-urlencoded',
 		'Authorization': 'Basic ' + new Buffer(querystring.escape(client.client_id) + ':' + querystring.escape(client.client_secret)).toString('base64')
 	};
@@ -905,7 +936,67 @@ app.post('/username_password', function(req, res) {
 		}
 	);
 	
-	
+	if (tokRes.statusCode >= 200 && tokRes.statusCode < 300) {
+    // 正常終了した場合
+		var body = JSON.parse(tokRes.getBody());
+
+    // 発行されたアクセストークンを取得する
+		access_token = body.access_token;
+		console.log('アクセストークンが発行されました： %s', access_token);
+
+		if (body.id_token) {
+      // IDトークンが発行された場合
+			console.log('IDトークンが発行されました： %s', body.id_token);
+      id_token_raw = body.id_token;
+			
+      /*
+        IDトークンが正当性を検証する
+      */
+      
+      // 認可サーバの公開鍵で、IDトークンの署名を検証する
+			var pubKey = jose.KEYUTIL.getKey(rsaKey);
+			var signatureValid = jose.jws.JWS.verify(body.id_token, pubKey, ['RS256']);
+			if (signatureValid) {
+        // 署名が正しい場合
+				console.log('署名が検証されました。');
+        // IDトークンのPayloadを抽出し、Base64URLデコードする
+				var tokenParts = body.id_token.split('.');
+				var payload = JSON.parse(base64url.decode(tokenParts[1]));
+				console.log('IDトークンのペイロード：', payload);
+
+        // nonceがある場合、それを付き合わせる
+        if (payload.nonce) {
+          if (payload.nonce == nonce) {
+            console.log('nonceパラメータの値がマッチしました。（認可コード発行リクエスト時の値：%s, 認可サーバから受け取った値：%s）', nonce, payload.nonce);
+          } else {
+            console.log('nonceパラメータの値がマッチしません。（認可コード発行リクエスト時の値：%s, 認可サーバから受け取った値：%s）', nonce, payload.nonce);
+            res.render('error', {error: 'nonceパラメータの値がマッチしません'});
+            return;
+          }
+        }
+        
+        // IDトークンの有効性を検証する
+        if (validateIdToken(payload)) {
+          id_token = payload;
+        } else {
+          res.render('error', {error: 'IDトークンは有効ではありません'});
+        }
+			} else {
+        console.log('IDトークンの署名を検証できませんでした');
+        res.render('error', {error: 'IDトークンは有効ではありません'});
+        return;
+      }
+		}
+		
+    // スコープを抽出する
+		scope = body.scope;
+		console.log('実際に認可されたスコープ： %s', scope);
+
+    // トップページを表示する
+		res.render('index', {access_token: access_token, refresh_token: refresh_token, scope: scope, id_token_raw: id_token_raw});
+	} else {
+		res.render('error', {error: 'アクセストークンを取得できませんでした。認可サーバのレスポンス：: ' + tokRes.statusCode})
+	}	
 });
 
 app.use('/', express.static('files/client'));

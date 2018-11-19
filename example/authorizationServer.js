@@ -84,7 +84,8 @@ var userInfo = {
 		"preferred_username": "alice",
 		"name": "Alice",
 		"email": "alice.wonderland@example.com",
-		"email_verified": true
+		"email_verified": true,
+    "password": "password"
 	},
 	
 	"Bob": {
@@ -92,7 +93,8 @@ var userInfo = {
 		"preferred_username": "bob",
 		"name": "Bob",
 		"email": "bob.loblob@example.net",
-		"email_verified": false
+		"email_verified": false,
+    "password": "password"
 	},
 
 	"Carol": {
@@ -102,7 +104,7 @@ var userInfo = {
 		"email": "carol.lewis@example.net",
 		"email_verified": true,
 		"username" : "clewis",
-		"password" : "user password!"
+    "password": "password"
  	}	
 };
 
@@ -580,29 +582,41 @@ app.post("/token", function(req, res){
 			}
 		});
 	} else if (req.body.grant_type == 'password') {
-    // TODO: Resource Owner Password Credentials Grant
+    /*
+      Resource Owner Password Credentails Grant
+    */
 		var username = req.body.username;
+    
+    // ユーザ名・パスワードで認証できない場合はエラー
 		var user = getUser(username);
 		if (!user) {
-			console.log('Unknown user %s', user);
 			res.status(401).json({error: 'invalid_grant'});
 			return;
 		}
-		console.log("user is %j ", user)
 		
 		var password = req.body.password;
 		if (user.password != password) {
-			console.log('Mismatched resource owner password, expected %s got %s', user.password, password);
 			res.status(401).json({error: 'invalid_grant'});
 			return;
 		}
 
-		var scope = req.body.scope;
+    // アクセストークン発行依頼でクライアントアプリケーションが指定したスコープ
+    var rscope = req.body.scope ? req.body.scope.split(' ') : undefined;
+    
+    // クライアントアプリケーションとして登録されたスコープ
+		var cscope = client.scope ? client.scope.split(' ') : undefined;
+		if (__.difference(rscope, cscope).length > 0) {
+			// クライアントアプリケーションが指定したスコープ＞登録されたスコープの場合、エラー
+			res.status(400).json({error: 'invalid_scope'});
+			return;
+		}
 
-		var token_response = generateTokens(req, res, clientId, user, scope);
-		
-		res.status(200).json(token_response);		
-		return;
+    // アクセストークン、IDトークンを発行する
+    var token_response = generateTokens(req, res, clientId, user, rscope, req.body.nonce, false);
+
+    res.status(200).json(token_response);
+    console.log('アクセストークンを発行しました： %s', token_response.access_token);
+    return;
 	} else {
 		console.log('Unknown grant type %s', req.body.grant_type);
 		res.status(400).json({error: 'unsupported_grant_type'});
