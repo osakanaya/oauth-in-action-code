@@ -169,6 +169,10 @@ var savedWords = [];
 
 app.options('/words', cors());
 app.get('/words', getAccessToken, requireAccessToken, function(req, res) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+
   var scopes = req.access_token.scope.split(' ');
   
 	if (__.contains(scopes, 'read')) {
@@ -181,6 +185,10 @@ app.get('/words', getAccessToken, requireAccessToken, function(req, res) {
 
 // リストに単語を追加する
 app.post('/words', getAccessToken, requireAccessToken, function(req, res) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+
   var scopes = req.access_token.scope.split(' ');
 
 	if (__.contains(scopes, 'write')) {
@@ -196,6 +204,10 @@ app.post('/words', getAccessToken, requireAccessToken, function(req, res) {
 
 // リストに単語を追加する
 app.delete('/words', getAccessToken, requireAccessToken, function(req, res) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+
   var scopes = req.access_token.scope.split(' ');
 
 	if (__.contains(scopes, 'delete')) {
@@ -210,6 +222,10 @@ app.delete('/words', getAccessToken, requireAccessToken, function(req, res) {
 // 好きな農産物のリストを表示する
 app.options('/produce', cors());
 app.get('/produce', getAccessToken, requireAccessToken, function(req, res) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+
   var scopes = req.access_token.scope.split(' ');
 
 	var produce = {fruit: [], veggies: [], meats: []};
@@ -240,6 +256,10 @@ var bobFavories = {
 
 app.options('/favorites', cors());
 app.get('/favorites', getAccessToken, requireAccessToken, function(req, res) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+
 	if (req.access_token.user == 'Alice') {
 		res.json({user: 'Alice', favorites: aliceFavorites});
 	} else if (req.access_token.user == 'Bob') {
@@ -253,6 +273,12 @@ app.get('/favorites', getAccessToken, requireAccessToken, function(req, res) {
 // 基本的なデータを取得する
 app.options('/resource', cors());
 app.post("/resource", cors(), getAccessToken, function(req, res){
+  // XSS対策
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  
+  // ウェブサイトがHTTPの代わりにHTTPSを用いて通信を行うようにブラウザに指示する
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000');
 
   // アクセストークンが指定されたかどうかをチェックする
 	if (req.access_token) {
