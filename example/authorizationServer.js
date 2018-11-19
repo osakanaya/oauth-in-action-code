@@ -10,6 +10,7 @@ var __ = require('underscore');
 __.string = require('underscore.string');
 var base64url = require('base64url');
 var jose = require('jsrsasign');
+var crypto = require('crypto');
 
 var app = express();
 
@@ -481,6 +482,28 @@ app.post("/token", function(req, res){
 			if (code.request.client_id == clientId) {
         // 認可コード発行リクエストと認証情報のクライアントIDが一致する場合
 
+        // PKCEによるチェックを行う
+        if (code.request.code_challenge) {
+          console.log('Code Verifier： %sに対してCode Challenge： %sをテストします', req.body.code_verifier, code.request.code_challenge);
+          
+          if (code.request.code_challenge_method == 'plain') {
+            var code_challenge = req.body.code_verifier;
+          } else if (code.request.code_challenge_method == 'S256') {
+            var code_challenge = base64url.fromBase64(crypto.createHash('sha256').update(req.body.code_verifier).digest('base64'));
+          } else {
+            console.log('未知のCode Challenge Mehthodです： %s', code.request.code_challenge_method);
+            res.status(400).json({error: 'invalid_request'});
+            return;
+          }
+          
+          if (code.request.code_challenge != code_challenge) {
+            // 再計算したCode Challengeが等しくない場合はエラー
+            console.log('Code Challgenが一致しません（期待される値： %s, 実際の値： %s', code.request.code_challenge, code_challenge);
+            res.status(400).json({error: 'invalid_request'});
+            return;
+          }
+        }
+        
         // ユーザの存在をチェックする
         var user = getUser(code.user.name);
         

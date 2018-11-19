@@ -8,6 +8,7 @@ var cons = require('consolidate');
 var randomstring = require("randomstring");
 var jose = require('jsrsasign');
 var base64url = require('base64url');
+var crypto = require('crypto');
 var __ = require('underscore');
 __.string = require('underscore.string');
 
@@ -66,6 +67,8 @@ var refresh_token = null;     // リフレッシュトークン
 var scope = null;             // 実際にリソースオーナーによって認可サーバから委譲されたスコープ
 var id_token = null;          // IDトークン（ペイロード）
 var id_token_raw = null;      // IDトークン
+
+var code_verifier = null;     // Code Verifier（PKCE）
 
 // トップページを表示する
 app.get('/', function (req, res) {
@@ -232,6 +235,12 @@ app.get('/authorize', function(req, res){
   // IDトークンの発行に際し、nonceパラメータを生成する
   nonce = randomstring.generate();
 	
+  // PKCEのためのCode Verifier/Code Challengeを生成する
+  code_verifier = randomstring.generate(80);
+  var code_challenge = base64url.fromBase64(crypto.createHash('sha256').update(code_verifier).digest('base64'));
+  
+  console.log('Code Verifier： %sとCode Challenge： %sを生成しました。', code_verifier, code_challenge);
+
   // Authorization Endpointにリダイレクトする
 	var authorizeUrl = buildUrl(authServer.authorizationEndpoint, {
 		response_type: 'code',
@@ -239,7 +248,9 @@ app.get('/authorize', function(req, res){
 		client_id: client.client_id,
 		redirect_uri: client.redirect_uris[0],
 		state: state,
-    nonce: nonce
+    nonce: nonce,
+    code_challenge: code_challenge, // PKCE
+    code_challenge_method: 'S256'   // PKCE
 	});
 	
 	console.log("リダイレクト先：", authorizeUrl);
@@ -309,7 +320,8 @@ app.get("/callback", function(req, res){
 	var form_data = qs.stringify({
 				grant_type: 'authorization_code',
 				code: code,
-				redirect_uri: client.redirect_uris[0]
+				redirect_uri: client.redirect_uris[0],
+        code_verifier: code_verifier
 			});
 	var headers = {
 		'Content-Type': 'application/x-www-form-urlencoded',
