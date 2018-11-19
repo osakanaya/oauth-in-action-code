@@ -479,6 +479,14 @@ app.post("/token", function(req, res){
       
       // 認可コードは1回限りのものなので、発行リクエストを削除する
 			delete codes[req.body.code];
+      
+      // 認可コードの発行リクエストでリダイレクトURIが指定されていた場合、アクセストークンの発行リクエストで指定されたリダイレクトURIと一致していることをチェックする
+      if (code.request.redirect_uri) {
+        if (code.request.redirect_uri != req.body.redirect_uri) {
+          res.status(400).json({error: 'invalid_grant'});
+        }
+      }
+      
 			if (code.request.client_id == clientId) {
         // 認可コード発行リクエストと認証情報のクライアントIDが一致する場合
 
