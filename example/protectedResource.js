@@ -193,7 +193,8 @@ app.post('/words', getAccessToken, requireAccessToken, function(req, res) {
 
 	if (__.contains(scopes, 'write')) {
 		if (req.body.word) {
-			savedWords.push(req.body.word);
+      // XSS対策：エスケープして保存する
+			savedWords.push(querystring.escape(req.body.word));
 		}
 		res.status(201).end();
 	} else {
@@ -202,7 +203,7 @@ app.post('/words', getAccessToken, requireAccessToken, function(req, res) {
 	}
 });
 
-// リストに単語を追加する
+// リストから単語を削除する
 app.delete('/words', getAccessToken, requireAccessToken, function(req, res) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-XSS-Protection', '1; mode=block');
