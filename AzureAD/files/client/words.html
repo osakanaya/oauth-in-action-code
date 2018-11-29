@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
+    <title>サンプルプログラム：クライアントアプリケーション</title>
+
+    <!-- Bootstrap -->
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
+	<style>
+	body {
+	  padding-top: 60px;
+	}
+	.navbar-inverse {
+		background-color: #223;
+	}
+	</style>
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+    <!--[if lt IE 9]>
+      <script src="https://oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js"></script>
+      <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+
+    <nav class="navbar navbar-inverse navbar-fixed-top">
+      <div class="container">
+        <div class="navbar-header">
+          <a class="navbar-brand" href="/">サンプルプログラム： <span class="label label-primary">クライアントアプリケーション</label></a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container">
+
+      <div class="row">
+		  
+		  <div class="col-md-4">
+			  <div class="well">
+				  <h3>現在の単語リストを取得する</h3>
+				  <% if (result == 'get') { %><p><span class="label label-success">成功</span></p><% } %>
+				  <% if (result == 'noget') { %><p><span class="label label-danger">失敗</span></p><% } %>
+				  <p><%- words ? '登録された単語: ' + words : ''%></p>
+				  <p><%- timestamp ? 'タイムスタンプ: ' + timestamp : ''%></p>
+			  	  <a class="btn btn-info" href="/get_words">単語リストを取得（GET）</a> 
+			  </div>
+		  </div>
+		  <div class="col-md-4">
+			  <div class="well">
+				  <h3>リストに単語を追加する</h3>
+				  <% if (result == 'add') { %><p><span class="label label-success">成功</span></p><% } %>
+				  <% if (result == 'noadd') { %><p><span class="label label-danger">失敗</span></p><% } %>
+				  <form class="form" action="/add_word" method="GET">
+					  <input type="text" name="word" placeholder="単語を入力">
+					  <input type="submit" class="btn btn-warning" href="/" value="単語を追加（POST）" >
+				  </form>
+			  </div>
+		  </div>
+		  <div class="col-md-4">
+			  <div class="well">
+				  <h3>リストから単語を削除する</h3>
+				  <% if (result == 'rm') { %><p><span class="label label-success">成功</span></p><% } %>
+				  <% if (result == 'norm') { %><p><span class="label label-danger">失敗</span></p><% } %>
+ 			  	  <a class="btn btn-danger" href="/delete_word">最後の単語を削除（DELETE）</a> 
+			  </div>
+		  </div>
+		  
+      </div>
+
+    </div><!-- /.container -->
+
+	
+	
+    <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+    <!-- Include all compiled plugins (below), or include individual files as needed -->
+	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+  </body>
+</html>
